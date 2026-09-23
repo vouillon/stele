@@ -6,7 +6,7 @@ description:
   "A build-time generator that turns a Menhir grammar's --list-errors output and its .cmly into readable syntax-error messages, with a golden/census/stats workflow, a soundness oracle, and a hand-override escape hatch; plus a small runtime helper (stele.runtime) that resolves the delimiter markers the generated messages carry. Configured per grammar by a text sidecar, so the tool itself is grammar-agnostic."
 maintainer: ["Jérôme Vouillon"]
 authors: ["Jérôme Vouillon"]
-license: "Apache-2.0"
+license: "MIT"
 homepage: "https://github.com/ocsigen/wax"
 doc: "https://ocsigen.org/wax/"
 bug-reports: "https://github.com/ocsigen/wax/issues"

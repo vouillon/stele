@@ -8,7 +8,7 @@
 (maintainers "Jérôme Vouillon")
 (source (github ocsigen/wax))
 (documentation "https://ocsigen.org/wax/")
-(license "Apache-2.0")
+(license "MIT")
 
 (package
   (name stele)
