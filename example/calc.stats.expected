@@ -9,6 +9,7 @@ generic fallback (expected list over 5, not overridden): 0
 delimiter hints: 2
 missed delimiter hints (opener on stack, none matched): 0
 jargon-rendered tokens: 0
+jargon-rendered nonterminals: 0
 state/automaton item-set match: 9/9
 unsound claims: 0
 entries with uncovered actions: 0

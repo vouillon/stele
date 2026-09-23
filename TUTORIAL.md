@@ -32,11 +32,12 @@ Here is a minimal calculator grammar, with bare tokens. A program is a
 %left PLUS
 %left STAR
 %%
-prog:  | LBRACE s = stmts RBRACE EOF { s }
-stmts: | { [] } | v = stmt r = stmts { v :: r }
-stmt:  | e = expr SEMI { e }
-expr:  | i = INT { i } | LPAREN e = expr RPAREN { e }
-       | a = expr PLUS b = expr { a + b } | a = expr STAR b = expr { a * b }
+prog:       | LBRACE s = stmts RBRACE EOF { s }
+stmts:      | { [] } | v = stmt r = stmts { v :: r }
+stmt:       | e = expression SEMI { e }
+expression: | i = INT { i } | LPAREN e = expression RPAREN { e }
+            | a = expression PLUS b = expression { a + b }
+            | a = expression STAR b = expression { a * b }
 ```
 
 The semantic actions evaluate each expression, so `calc` is a real little
