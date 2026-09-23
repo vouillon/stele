@@ -52,13 +52,13 @@ the same errors improve at each one. Its final state is the runnable example in
 ## Install
 
 stele is a standard dune/opam project. You need OCaml (`>= 4.14`) and menhir.
-Once it is published to opam:
 
 ```
 opam install stele
 ```
 
-Until then, run `opam install .` (or just `dune build`) from a source checkout.
+To build from a source checkout instead, run `opam install .` (or just
+`dune build`).
 
 You get two things:
 
@@ -673,8 +673,7 @@ stele/
     dune
   test/                      ; stele's own regression tests
     delim/                   ; the delimiter-pairing grammar + runtime unit check
-  README.md
-  TUTORIAL.md
+  README.md  TUTORIAL.md  CHANGES.md  LICENSE
 ```
 
 ## Credit

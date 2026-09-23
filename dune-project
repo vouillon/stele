@@ -1,13 +1,11 @@
 (lang dune 3.20)
 (using menhir 3.0)
 (name stele)
-(version "0.1.1~dev")
 (generate_opam_files true)
 
 (authors "Jérôme Vouillon")
-(maintainers "Jérôme Vouillon")
-(source (github ocsigen/wax))
-(documentation "https://ocsigen.org/wax/")
+(maintainers "Jérôme Vouillon <jerome.vouillon@gmail.com>")
+(source (github vouillon/stele))
 (license "MIT")
 
 (package

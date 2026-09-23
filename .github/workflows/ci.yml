@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  format:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: "5.4"
+
+      # Pinned to match the version in .ocamlformat so the check is reproducible.
+      - name: Install ocamlformat
+        run: opam install ocamlformat.0.29.0
+
+      - name: Check formatting
+        run: opam exec -- dune build @fmt
+
+  build:
+    name: "Build & test (${{ matrix.os }}, OCaml ${{ matrix.ocaml-compiler }})"
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+        ocaml-compiler:
+          - "4.14"
+          - "5.4"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up OCaml ${{ matrix.ocaml-compiler }}
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ matrix.ocaml-compiler }}
+
+      - name: Install dependencies
+        run: opam install . --deps-only --with-test
+
+      # Build and install like a user would, which also exercises the install
+      # path itself.
+      - name: Build
+        run: opam install .
+
+      - name: Run tests
+        run: opam exec -- dune runtest
