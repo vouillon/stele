@@ -1035,11 +1035,49 @@ let renders_as_jargon cfg terminals s =
    mechanical, unarguable cases; the [names] entry remains the fix for the rest. *)
 let jargon_words =
   [
-    "annot"; "arg"; "args"; "attr"; "attrs"; "aux"; "cond"; "conds"; "ctx";
-    "decl"; "decls"; "def"; "defs"; "elt"; "elts"; "expr"; "exprs"; "fn";
-    "freq"; "idx"; "impl"; "instr"; "instrs"; "num"; "opt"; "opts"; "param";
-    "params"; "pat"; "pats"; "ptr"; "ref"; "refs"; "req"; "res"; "sep"; "stmt";
-    "stmts"; "tmp"; "val"; "vals"; "var"; "vars";
+    "annot";
+    "arg";
+    "args";
+    "attr";
+    "attrs";
+    "aux";
+    "cond";
+    "conds";
+    "ctx";
+    "decl";
+    "decls";
+    "def";
+    "defs";
+    "elt";
+    "elts";
+    "expr";
+    "exprs";
+    "fn";
+    "freq";
+    "idx";
+    "impl";
+    "instr";
+    "instrs";
+    "num";
+    "opt";
+    "opts";
+    "param";
+    "params";
+    "pat";
+    "pats";
+    "ptr";
+    "ref";
+    "refs";
+    "req";
+    "res";
+    "sep";
+    "stmt";
+    "stmts";
+    "tmp";
+    "val";
+    "vals";
+    "var";
+    "vars";
   ]
 
 (* Whether an auto-derived rendering contains one of those. Words are compared
@@ -1048,8 +1086,8 @@ let jargon_words =
 let rendering_has_jargon_word rendered =
   String.split_on_char ' ' rendered
   |> List.exists (fun w ->
-         (not (w = "a" || w = "an"))
-         && List.mem (String.lowercase_ascii w) jargon_words)
+      (not (w = "a" || w = "an"))
+      && List.mem (String.lowercase_ascii w) jargon_words)
 
 (* --- Hand-written overrides (the sanctioned escape hatch) --- *)
 
@@ -1829,7 +1867,8 @@ let output_stats cfg gram auto results =
       (fun acc (_, s) ->
         List.fold_left
           (fun acc u ->
-            if u.nu_source = Auto && rendering_has_jargon_word u.nu_rendered then
+            if u.nu_source = Auto && rendering_has_jargon_word u.nu_rendered
+            then
               StringSet.add
                 (Printf.sprintf "%s (%s)" u.nu_symbol u.nu_rendered)
                 acc
@@ -2623,7 +2662,8 @@ let tune_classify ~base ~trial =
         else "\"Assuming ... is complete\" hedges"
       in
       TMixed
-        (Printf.sprintf "%s, but also turns %d message%s into %s" gain d_template
+        (Printf.sprintf "%s, but also turns %d message%s into %s" gain
+           d_template
            (if d_template = 1 then "" else "s")
            hedges)
     else
@@ -2699,20 +2739,20 @@ let tune_vector_delta base trial =
   let counter d sing plur =
     if d <> 0 then add (tune_counter_clause d sing plur)
   in
-  counter
-    (t.tv_over5 - b.tv_over5)
-    "state that gives up with a bare \"Syntax error\" (too many options to list)"
-    "states that give up with a bare \"Syntax error\" (too many options to list)";
-  counter
-    (t.tv_empty - b.tv_empty)
+  counter (t.tv_over5 - b.tv_over5)
+    "state that gives up with a bare \"Syntax error\" (too many options to \
+     list)"
+    "states that give up with a bare \"Syntax error\" (too many options to \
+     list)";
+  counter (t.tv_empty - b.tv_empty)
     "state that gives up with a bare \"Syntax error\" (nothing legal to list)"
     "states that give up with a bare \"Syntax error\" (nothing legal to list)";
-  counter (t.tv_hints - b.tv_hints)
-    "message that points at the unclosed opener"
+  counter (t.tv_hints - b.tv_hints) "message that points at the unclosed opener"
     "messages that point at the unclosed opener";
   counter
     (t.tv_template - b.tv_template)
-    "\"Assuming ... is complete\" message" "\"Assuming ... is complete\" messages";
+    "\"Assuming ... is complete\" message"
+    "\"Assuming ... is complete\" messages";
   counter
     (t.tv_cascade - b.tv_cascade)
     "\"Assuming ...\" message stacked 4+ constructs deep"
@@ -2721,7 +2761,8 @@ let tune_vector_delta base trial =
    and d_t = t.tv_uncov_t - b.tv_uncov_t in
    if d_e <> 0 then
      let head =
-       tune_counter_clause d_e "state whose \"Expecting\" list omits a legal token"
+       tune_counter_clause d_e
+         "state whose \"Expecting\" list omits a legal token"
          "states whose \"Expecting\" list omits a legal token"
      in
      if d_t <> 0 then
@@ -2738,7 +2779,8 @@ let tune_vector_delta base trial =
   counter
     (t.tv_jargon - b.tv_jargon)
     "token shown as raw grammar jargon" "tokens shown as raw grammar jargon";
-  counter (t.tv_unsound - b.tv_unsound)
+  counter
+    (t.tv_unsound - b.tv_unsound)
     "message listing a token the parser would refuse"
     "messages listing a token the parser would refuse";
   if t.tv_entries <> b.tv_entries then
@@ -2747,7 +2789,8 @@ let tune_vector_delta base trial =
          t.tv_entries);
   if t.tv_withlist <> b.tv_withlist then
     add
-      (Printf.sprintf "failure points that get an \"Expecting ...\" list: %d \xe2\x86\x92 %d"
+      (Printf.sprintf
+         "failure points that get an \"Expecting ...\" list: %d \xe2\x86\x92 %d"
          b.tv_withlist t.tv_withlist);
   match List.rev !clauses with
   | [] -> "    No counted change."
@@ -2859,7 +2902,8 @@ let tune_move ts op nt =
    the N hand-written messages (from the [.overrides] file) whose key sentences
    the trial's state merge/renumber changes. *)
 let tune_rekey_phrase rc =
-  if rc = 1 then "1 hand-written override" else Printf.sprintf "%d hand-written overrides" rc
+  if rc = 1 then "1 hand-written override"
+  else Printf.sprintf "%d hand-written overrides" rc
 
 let tune_dead_sweep ts =
   Printf.printf
@@ -2947,16 +2991,21 @@ let tune_advisor ts candidates =
     !dead !neutral !skipped;
   Printf.printf
     "  what each group means, and what to do with it:\n\
-    \    improving             some message gets better, none gets worse; consider applying\n\
-    \    relocates-overridden  its only gains are on states you already hand-wrote\n\
+    \    improving             some message gets better, none gets worse; \
+     consider applying\n\
+    \    relocates-overridden  its only gains are on states you already \
+     hand-wrote\n\
     \                          a message for; usually skip (details below)\n\
     \    mixed                 helps one way and hurts another; read the wording\n\
     \                          changes and judge (details below)\n\
     \    harmful               some message gets worse; do not apply\n\
-    \    dead/no-op            no message changes at all; the construct is not earning\n\
+    \    dead/no-op            no message changes at all; the construct is not \
+     earning\n\
     \                          its place and can be dropped\n\
-    \    neutral               messages reshuffle with no net gain or loss; usually skip\n\
-    \    skipped               menhir rejected the grammar with this move; not applicable\n\n";
+    \    neutral               messages reshuffle with no net gain or loss; \
+     usually skip\n\
+    \    skipped               menhir rejected the grammar with this move; not \
+     applicable\n\n";
   if improving = [] then
     Printf.printf
       "  No single move improves the messages outright (the usual result once\n\
@@ -3104,10 +3153,10 @@ let run_tune mode ~menhir ~config_file ~overrides_file ~grammar_file =
          construct is complete, its error message reads \"Assuming that the\n\
          <construct> is complete, expecting ...\" instead of listing everything\n\
          the construct itself could have continued with. Adding a construct to\n\
-         the list trades a plain \"Expecting ...\" list for that \"Assuming ...\"\n\
+         the list trades a plain \"Expecting ...\" list for that \"Assuming \
+         ...\"\n\
          phrasing; removing one does the reverse.\n\n";
-      Printf.printf "on the list now (%d): %s\n\n"
-        (List.length ts.ts_annots)
+      Printf.printf "on the list now (%d): %s\n\n" (List.length ts.ts_annots)
         (String.concat " " ts.ts_annots);
       (match mode with
       | Tune_dead -> tune_dead_sweep ts
