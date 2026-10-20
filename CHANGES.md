@@ -1,5 +1,10 @@
 # Changes
 
+## Unreleased
+
+- A two-item list of expected tokens no longer has a comma before "or":
+  "Expecting ')' or an operator." instead of "Expecting ')', or an operator.".
+
 ## 0.1.0
 
 First release as a standalone project. stele was previously developed inside

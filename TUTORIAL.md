@@ -85,7 +85,7 @@ Expecting 'plus', 'rparen', or 'star'.
 The content is already right (`;` is correctly missing, since we are inside
 parentheses), but the words are token names, not what the user typed.
 
-Input B says `Expecting 'rbrace', or a stmt.` The "a stmt" comes from the rule
+Input B says `Expecting 'rbrace' or a stmt.` The "a stmt" comes from the rule
 name: a lowercase rule is shown as its name with an article, so grammar names
 leak straight into the message.
 
@@ -227,7 +227,7 @@ STAR
   legal. Input A becomes:
 
   ```
-  Expecting ')', or an operator.
+  Expecting ')' or an operator.
   <2>This '(' opens the enclosing construct.
   ```
 
@@ -320,7 +320,7 @@ $ calc ok.calc
 => 9
 
 $ calc unclosed.calc
-Error: Expecting ')', or an operator.
+Error: Expecting ')' or an operator.
  --> unclosed.calc:1:6
 1 | { (1 }
   ·      ^

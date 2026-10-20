@@ -12,7 +12,7 @@ stele writes those messages for you. It reads the grammar, works out what each
 failure point would have accepted next, and says so in plain terms:
 
 ```
-Error: Expecting ')', or an operator.
+Error: Expecting ')' or an operator.
  --> unclosed.calc:1:6
 1 | { (1 }
   ·      ^

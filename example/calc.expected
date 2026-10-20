@@ -8,7 +8,7 @@ Expecting an expression.
 
 prog: LBRACE INT RBRACE
 
-Expecting ';', or an operator.
+Expecting ';' or an operator.
 
 prog: LBRACE INT STAR STAR
 
@@ -16,7 +16,7 @@ Expecting an expression.
 
 prog: LBRACE LPAREN INT RBRACE
 
-Expecting ')', or an operator.
+Expecting ')' or an operator.
 <2>This '(' opens the enclosing construct.
 
 prog: LBRACE LPAREN STAR
