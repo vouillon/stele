@@ -3,10 +3,10 @@
 Machine-generated, user-friendly syntax-error messages for any
 [Menhir](https://gitlab.inria.fr/fpottier/menhir) grammar.
 
-By default, a Menhir parser that meets bad input tells the user only "Syntax
-error". Menhir can show a real message instead, but only if you write one for
-every point where the parse can get stuck. A realistic grammar has hundreds of
-them, and each one needs revisiting whenever the grammar changes.
+A Menhir parser that meets bad input raises `Error`, and most drivers report
+just "Syntax error". Menhir can show a real message instead, but only if you
+write one for every point where the parse can get stuck. A realistic grammar has
+hundreds of them, and each needs revisiting whenever the grammar changes.
 
 stele writes those messages for you. It reads the grammar, works out what each
 failure point would have accepted next, and says so in plain terms:
@@ -19,22 +19,22 @@ Error: Expecting ')' or an operator.
   ·   ^ This '(' opens the enclosing construct.
 ```
 
-It also pins the messages in golden files, so a grammar change shows up as a
-diff of the messages you can review, rather than as messages that quietly go
-stale.
+Because the messages are generated, you can pin them in golden files. A
+grammar change then shows up as a diff of the messages for you to review,
+instead of leaving hand-written messages to go stale.
 
 stele powers the error messages of both grammars in the
 [Wax](https://github.com/ocsigen/wax) toolchain (WebAssembly text and the Wax
 language). It builds on François Pottier's work on error diagnosis in LR(1)
 parsers; see [Credit](#credit).
 
-**New here?** Start with the [tutorial](TUTORIAL.md). It takes a tiny calculator
-grammar from the bare "Syntax error" to the full setup in ten stages, showing
-the same errors improve at each one. Its final state is the runnable example in
-`example/`.
+The [tutorial](TUTORIAL.md) is the place to start. It takes a tiny calculator
+grammar from the bare "Syntax error" to the full setup in ten stages, and
+follows the same three errors through each one. Its final state is the runnable
+example in `example/`.
 
-> Two caveats. The message templates are English-only. And the heuristics have
-> been tried on exactly two grammars, so expect to find rough edges.
+> The message templates are English-only, and the heuristics have so far been
+> tried on two grammars, so expect rough edges.
 
 **Contents**
 
@@ -106,7 +106,7 @@ You do not need parsing theory to use stele, but a few terms come up often.
 
 - **Error state.** As a parser reads input, it moves through internal states.
   An *error state* is one where the next token cannot be accepted, so each error
-  state is one specific way a parse can fail. A realistic grammar has hundreds.
+  state is one specific way a parse can fail.
 - **`--list-errors` and `--compile-errors`.** The first Menhir command lists
   every error state, each with a sample input (a *sentence*) that reaches it.
   The second takes one message per state and compiles them into an OCaml module,
@@ -127,8 +127,9 @@ You do not need parsing theory to use stele, but a few terms come up often.
 
 For each error state, stele produces some of the following.
 
-- An **Expecting list** of what could legally come next, worked out from the
-  grammar and capped at five items: "Expecting ')', ';', or an operator."
+- An Expecting list of what could legally come next, worked out from the
+  grammar: "Expecting ')', ';', or an operator." It is capped at five items; a
+  state with more falls back to "Syntax error".
 - A **delimiter hint** pointing back at the `(`, `[` or `{` the parser is still
   inside: `<2>This '{' opens the enclosing construct.` The `<2>` is a
   placeholder that the [runtime helper](#the-runtime-helper) replaces with the
@@ -145,10 +146,11 @@ For each error state, stele produces some of the following.
 stele also checks its own output:
 
 - a **soundness check** verifies, against the compiled parser, that every token a
-  message calls legal really is legal in that state;
+  message calls legal is legal in that state (`unsound claims` in `stats`);
 - a **state-correspondence check** confirms that the `.messages` file and the
-  `.cmly` agree on how states are numbered. stele relies on this to use its two
-  inputs together, so keep it in mind when debugging.
+  `.cmly` number the states the same way (`state/automaton item-set match` in
+  `stats`). stele combines its two inputs by state number, so if this check
+  fails, every message is suspect.
 
 ## The pipeline (dune rules)
 
@@ -168,8 +170,8 @@ flowchart LR
   M -->|"menhir --compile-errors"| P["Parser_messages.ml"]
 ```
 
-Here is the full version, with the sidecars and a golden check. See
-[`example/dune`](example/dune) for a complete, runnable copy.
+The full set of rules adds the sidecars and a golden check.
+[`example/dune`](example/dune) has a complete, runnable copy.
 
 ```lisp
 ; 1. one sample sentence per error state
@@ -205,9 +207,8 @@ stele has one subcommand per kind of output. They all take the same inputs:
 stele <command> --cmly g.cmly [--config g.config] [--overrides g.overrides] g.messages
 ```
 
-`--cmly` is required; the two sidecars are optional. Each subcommand does
-exactly one thing. Run `stele --help` or `stele <command> --help` for the
-manual pages.
+`--cmly` is required; the two sidecars are optional. `stele --help` and
+`stele <command> --help` print the manual pages.
 
 | Command | Prints | Use it when |
 |---|---|---|
@@ -222,11 +223,11 @@ manual pages.
 `stele tune` is different: it runs menhir itself, once per trial, starting from
 the grammar source. See [The annotation tuner](#the-annotation-tuner).
 
-It is worth wiring each command as a dune alias per grammar, with the file
-paths written once and a `(universe)` dependency so it re-runs on request. This
-saves typing and stops a hand-run command from silently leaving out
-`--overrides`. The inspection commands are fast. The `tune` commands re-run
-menhir many times and take tens of seconds, so run them only on demand.
+Wire each command as a dune alias per grammar, with the file paths written
+once and a `(universe)` dependency so it re-runs on request. This saves typing,
+and a hand-run command can no longer leave out `--overrides` by mistake. The
+inspection commands are fast. The `tune` commands re-run menhir many times and
+take tens of seconds, so keep them out of `runtest`.
 
 ### What `stats` reports
 
@@ -237,12 +238,12 @@ hints, missed hints, jargon, cascade depth, and the soundness check results.
 It ends with one line per configured class, in file order:
 
 ```
-class "an operator": collapsed in 33 entries
+class "an operator": collapsed in 3 entries
 ```
 
 The number is how many states had two or more of the class's members legal at
-once, so the class applied. It counts this even when an override or the
-five-item cap means the label is not actually shown. Zero is allowed (a class
+once, so the class applied. It counts these states even when an override or the
+five-item cap keeps the label from being shown. Zero is allowed (a class
 can wait for a state that needs it), but because the line is pinned, a class
 that stops applying after a grammar change shows up as a diff.
 
@@ -251,9 +252,10 @@ It also reports `names configured: X, unused: Y`, with a line for each
 
 ### What `census` reports
 
-Each distinct message once, with how often it occurs. The stack index in
-delimiter hints is written `<_>`, so a change in which sample sentence menhir
-picks at most changes a count, and a wording change is a one-line diff.
+`census` prints each distinct message once, with how often it occurs. The
+stack index in delimiter hints is written `<_>`, so if menhir picks a different
+sample sentence for a state, at most a count changes, and a wording change is a
+one-line diff.
 
 ### What `names` reports
 
@@ -276,9 +278,9 @@ Use it to find two things: awkward renderings that deserve a `[names]` entry
 
 ### What `suggest-classes` reports
 
-Candidate `[class]` blocks for the config file. It groups tokens that always
-appear in exactly the same states, so merging them under one label never hides
-a token a state needed. It keeps groups of three or more and ranks them by how
+`suggest-classes` prints candidate `[class]` blocks for the config file. It
+groups tokens that are always legal in the same states, so merging them under
+one label never hides a token a state needed. It keeps groups of three or more and ranks them by how
 many lists they would bring under the five-item cap:
 
 ```
@@ -293,8 +295,8 @@ TRY_TABLE
 ```
 
 You choose the label. Sometimes you also split a group: arithmetic and
-comparison operators, for instance, are often legal in exactly the same places
-and land in one group, yet read better as two labels.
+comparison operators, for instance, are often legal in the same places and
+land in one group, but read better as two labels.
 
 ## Golden files
 
@@ -303,20 +305,20 @@ Pin three views of the output, each as its own golden file:
 | Golden file | Command | What it pins |
 |---|---|---|
 | `parser_messages.expected` | `stele generate --no-comments` | each sample sentence and its message, sorted by sentence so renumbered states cause no churn |
-| `parser_messages.stats.expected` | `stele stats` | the quality counters, so quality can only improve |
+| `parser_messages.stats.expected` | `stele stats` | the quality counters, so a drop in quality shows up as a diff |
 | `parser_messages.census.expected` | `stele census` | the distinct messages with counts, a compact view of all the wording |
 
-For any grammar or generator change: run `dune runtest`, read the three diffs,
-then `dune promote`. A message diff you agree with is fine. A **stats** counter
-getting worse without a message diff that justifies it means the change made
-the messages worse. Never edit a `.expected` file by hand.
+After any grammar or generator change, run `dune runtest`, read the three
+diffs, then run `dune promote`. A message diff you agree with is fine. A `stats`
+counter that gets worse, with no message diff to justify it, means the change
+made the messages worse. Never edit a `.expected` file by hand.
 
 ## The config file
 
-The config file is where you improve the wording without touching the
-generator. It holds whatever stele cannot learn from the `.cmly`, which is what
-keeps the generator itself independent of any grammar. Without one, stele uses
-no custom names, no classes, and only token aliases to find delimiters.
+The config file is where you improve the wording. It holds what stele cannot
+learn from the grammar: readable names, token classes, and extra delimiters.
+Without one, stele uses no custom names and no classes, and finds delimiters
+from token aliases alone.
 
 The format is line-based: `[section]` headers, one entry per line, and `#`
 comments and blank lines anywhere. There are four sections, all optional:
@@ -351,8 +353,8 @@ STAR
 my_list_combinator
 ```
 
-For a real example, see [`example/calc.config`](example/calc.config): two
-sections, a dozen lines.
+The calc example's [`example/calc.config`](example/calc.config) uses two
+sections and three entries.
 
 The config file belongs to one grammar: every entry must name a symbol that
 grammar has, so two grammars cannot share one.
@@ -360,7 +362,7 @@ grammar has, so two grammars cannot share one.
 **Closing delimiters** need no config. A token whose alias *ends* with `)`, `]`
 or `}` is a closer, just as one whose alias *begins* with `(`, `[` or `{` is an
 opener. Multi-character delimiters such as `[|` and `|]`, or `(then`, work the
-same way. So a grammar that aliases its delimiters gets hints for free.
+same way, so a grammar that aliases its delimiters gets hints with no config.
 
 Which closer goes with which opener is read from the grammar's rules, not
 guessed from the bracket character, so `[ ]` and `[| |]` stay distinct. When a
@@ -394,7 +396,7 @@ This is how a symbol is turned into words, in order of precedence:
    is right for keywords (`'func'`, `'mut'`) but wrong for value tokens: an
    identifier token would read `'id'`, as if the user should type those letters.
 
-The practical consequence: **your rule names are the message vocabulary.**
+In practice, **your rule names are the message vocabulary.**
 stele deliberately says "an expression" rather than listing everything an
 expression can start with, so a rule name that reads as a noun phrase gives a
 good message with no further work.
@@ -439,8 +441,8 @@ Some ways to get better names from the grammar:
   This reads "an export" where the inline form read `'(export'`.
 
 - **Alias every token with its source spelling**, including multi-character
-  openers (`"(then"`, `"(@if"`). Aliases improve the wording and give you
-  delimiter hints for free.
+  openers (`"(then"`, `"(@if"`). Aliases improve the wording and turn on
+  delimiter hints.
 
 - **Split a shared rule** (advanced; see below).
 
@@ -529,8 +531,8 @@ prints, and write the message in place of the placeholder.
 
 ## The runtime helper
 
-This is a one-time setup for whoever wires stele's output into the parser's
-error handler.
+You set this up once, when you wire stele's output into the parser's error
+handler.
 
 A message can point at a place in the source: the opening delimiter, or the
 span of a finished construct. But the message is written at build time, before
@@ -568,9 +570,9 @@ delimiter hint:
 A resolver that only knows `<N>` leaves a `<^N>` line in the text unchanged, so
 output from a newer generator stays readable with an older helper.
 
-What you do with `main_message` and `labels` is up to you: stele stops at the
-text and the spans, and does not render anything. To print output like the
-example at the top of this page, pass them to a source-diagnostics renderer.
+stele stops at the text and the spans: it does not render anything. To print
+output like the example at the top of this page, pass them to a
+source-diagnostics renderer.
 [Grace](https://github.com/johnyob/grace) is a good choice for OCaml: use the
 message as the diagnostic and each label as a Grace label. (Wax uses its own
 diagnostic printer. Either works, since a label is just a span and a text.)
@@ -580,9 +582,9 @@ diagnostic printer. Either works, since a label is just a span and a text.)
 (Advanced, and optional.) `%on_error_reduce` annotations decide which messages
 become hedges (see [What a message contains](#what-a-message-contains)), and the
 best set changes as a grammar grows. `stele tune` suggests changes to that set.
-It only recommends: it never edits your files, and it is not part of any test
-(the golden files already guard the current state). Run it when the grammar has
-grown.
+It only recommends. It never edits your files, and it is not part of any test,
+since the golden files already guard the current state. Run it when the grammar
+has grown.
 
 Each trial copies the grammar to a scratch directory, adds or removes one
 annotation, re-runs menhir, regenerates the messages, and compares the quality
@@ -601,7 +603,7 @@ stele tune calibrate --grammar g.mly [--config g.config] --verdicts g.verdicts
 - **`dead`** removes each annotation in turn and reports the ones whose removal
   changes nothing, so you can delete them.
 - **`advise`** tries every single change: removing an annotation, or adding one
-  for any rule the parser reduces. The report is written for non-experts. It
+  for any rule the parser reduces. The report assumes no parsing expertise. It
   starts with a plain explanation of what the annotations do, groups the changes
   (improving, relocates-overridden, mixed, harmful, dead, neutral, skipped) with
   advice for each group, and describes each change in terms of the messages, for
@@ -679,10 +681,10 @@ stele/
 ## Credit
 
 stele stands on François Pottier's *Reachability and Error Diagnosis in LR(1)
-Parsers* (CC 2016). Menhir's `--list-errors` implements that paper's algorithm,
-so if you use stele you are using it too. The paper listed every error state of
-CompCert's C parser and wrote a complete set of messages for them by hand. stele
-automates that work, and treats the result like code. Three of its conventions
+Parsers* (CC 2016). Menhir's `--list-errors`, which stele builds on, implements
+that paper's algorithm. The paper listed every error state of CompCert's C
+parser and wrote a complete set of messages for them by hand. stele automates
+that work, and treats the result like code. Three of its conventions
 come straight from the paper:
 
 - the **hedge** wording ("Assuming that the statements are complete, …") is the
@@ -692,7 +694,7 @@ come straight from the paper:
 - splitting a shared rule so each use gets its own message is its "selective
   duplication" (see [Splitting a shared rule](#splitting-a-shared-rule)).
 
-Where the paper's messages repeat the recognized construct back to the reader,
+Where the paper's messages repeat the recognised construct back to the reader,
 stele underlines it in the source instead.
 
 Reference: François Pottier, [Reachability and Error Diagnosis in LR(1)
