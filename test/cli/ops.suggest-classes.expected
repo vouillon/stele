@@ -1,0 +1,10 @@
+# cluster of 6 tokens co-occurring in 6 states; collapsing them
+# newly fits 6 entries under the <=5 cap and removes 30 list items.
+[class <LABEL>]
+GT
+LT
+MINUS
+PLUS
+SLASH
+STAR
+

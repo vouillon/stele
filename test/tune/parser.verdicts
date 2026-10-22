@@ -1,0 +1,3 @@
+# Past decisions on the annotations, replayed by `stele tune calibrate`.
+keep list(stmt)
+removed stmt

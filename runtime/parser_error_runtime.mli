@@ -62,8 +62,8 @@ module Make (E : ENGINE) : sig
       expands any Menhir [$i] source-slice references, then turns each marker
       line into a {!label}:
       - [<N>…] anchors at the [N]-th stack cell's opening delimiter (walking
-        back over blanks to the [(] / [\[] / [{] when the cell's own start is
-        not itself the delimiter);
+        back over blanks and line breaks to the [(] / [\[] / [{] when the cell's
+        own start is not itself the delimiter);
       - [<^N>…] anchors across the [N]-th stack cell's full span (the whole
         construct, however many lines it crosses), and {e dropped} when that
         span is zero-width (an epsilon reduction — no construct to point at).

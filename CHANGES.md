@@ -4,6 +4,32 @@
 
 - A two-item list of expected tokens no longer has a comma before "or":
   "Expecting ')' or an operator." instead of "Expecting ')', or an operator.".
+- `stele tune` finds the `%on_error_reduce` annotations wherever menhir does:
+  in several declarations, indented, spread over lines, with comments. It
+  edits them in place, so each keeps its priority level. It used to read only
+  the first declaration line and rewrite every such line with its list.
+- `stele tune` can now try removing the last annotation (it used to write an
+  empty declaration, which menhir rejects, and reported the move as skipped),
+  and advises on additions for a grammar that has no annotation yet.
+- `stele tune` rates a move harmful when it introduces a rule name that reads
+  as code jargon, as `stats` reports under "jargon-rendered nonterminals".
+- `stele tune` reports a grammar menhir rejects with menhir's own error, and a
+  bad config as such. The timing line now goes to stderr.
+- "jargon-rendered nonterminals" in `stats` also catches a rule name shown
+  through its list ("Expecting '}' or a stmt." for a list of `stmt`).
+- An override whose prose contains '<' no longer counts as a delimiter hint in
+  `stats`; only a line starting with a `<N>` marker does.
+- Two overrides for the same sentence, an override with no message, and a
+  `<^N>` marker outside the state's stack are now errors.
+- A duplicate `[names]` entry is now an error, and config syntax errors give
+  the file and line.
+- A missing input file or an unreadable `.cmly` gives a one-line `stele: ...`
+  error instead of an exception.
+- "Assuming that the X is complete": a `[names]` value written without an
+  article now gets "is" or "are" from its last word, instead of always "are".
+- The runtime helper finds an opening delimiter on an earlier line when it has
+  to walk back to it.
+- `stele suggest-classes` writes "entries" instead of "entrie(s)".
 
 ## 0.1.0
 

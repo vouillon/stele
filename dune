@@ -6,7 +6,18 @@
  (name main)
  (public_name stele)
  (package stele)
- (modules main parse_messages)
+ (modules
+  main
+  util
+  grammar
+  config
+  naming
+  delimiters
+  overrides
+  generate
+  reports
+  tune
+  parse_messages)
  ; menhirSdk reads the .cmly for exact productions/nullability/aliases; str is
  ; still used by parse_messages.ml to parse the --list-errors comment blocks;
  ; cmdliner drives the subcommand CLI; unix gives the `tune` subcommand

@@ -302,6 +302,10 @@ stele tune advise  --grammar parser.mly --config calc.config --overrides calc.ov
   ranks the results. It also flags changes whose whole benefit lands on states
   you already overrode by hand.
 
+On calc, `advise` finds nothing to improve. Removing `stmts` is the one change
+it rates harmful: input B would go back to "Expecting '}' or a stmt.", with a
+rule name leaking into the message.
+
 It only recommends. The decisions stay with you, and the golden files show you
 their consequences.
 
@@ -316,8 +320,10 @@ The [`example/`](example/) directory holds this tutorial's final state:
   [`calc.overrides`](example/calc.overrides);
 - the dune rules, in [`dune`](example/dune);
 - the generator's golden files [`calc.expected`](example/calc.expected),
-  [`calc.stats.expected`](example/calc.stats.expected) and
-  [`calc.names.expected`](example/calc.names.expected);
+  [`calc.stats.expected`](example/calc.stats.expected),
+  [`calc.census.expected`](example/calc.census.expected) and
+  [`calc.names.expected`](example/calc.names.expected), and the tuner's advice,
+  [`calc.tune-advise.expected`](example/calc.tune-advise.expected);
 - the driver's output on one good and three broken inputs, as `calc.run.*`.
 
 It builds a runnable `calc` you can point at a file. The three inputs now

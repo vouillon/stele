@@ -1,0 +1,43 @@
+; The %on_error_reduce tuner on a grammar whose annotations are awkward to find
+; (see parser.mly). Each trial re-runs menhir, so the rules pass it explicitly.
+; The reports go to stdout and are deterministic; the timing goes to stderr.
+; Accept changes with `dune promote`.
+
+(rule
+ (with-stdout-to
+  tune-dead.actual
+  (run stele tune dead --menhir %{bin:menhir} --grammar %{dep:parser.mly})))
+
+(rule
+ (alias runtest)
+ (action
+  (diff tune-dead.expected tune-dead.actual)))
+
+(rule
+ (with-stdout-to
+  tune-advise.actual
+  (run stele tune advise --menhir %{bin:menhir} --grammar %{dep:parser.mly})))
+
+(rule
+ (alias runtest)
+ (action
+  (diff tune-advise.expected tune-advise.actual)))
+
+(rule
+ (with-stdout-to
+  tune-calibrate.actual
+  (run
+   stele
+   tune
+   calibrate
+   --menhir
+   %{bin:menhir}
+   --grammar
+   %{dep:parser.mly}
+   --verdicts
+   %{dep:parser.verdicts})))
+
+(rule
+ (alias runtest)
+ (action
+  (diff tune-calibrate.expected tune-calibrate.actual)))

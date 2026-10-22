@@ -127,7 +127,7 @@ You do not need parsing theory to use stele, but a few terms come up often.
 For each error state, stele produces some of the following.
 
 - An Expecting list of what could legally come next, worked out from the
-  grammar: "Expecting ')', ';', or an operator." It is capped at five items; a
+  grammar: "Expecting ')' or an operator." It is capped at five items; a
   state with more falls back to "Syntax error", unless a `[class]` in the
   [config file](#the-config-file) shortens the list or you write an override.
 - A **delimiter hint** pointing back at the `(`, `[` or `{` the parser is still
@@ -286,8 +286,8 @@ one label never hides a token a state needed. It keeps groups of three or more
 and ranks them by how many lists they would bring under the five-item cap:
 
 ```
-# cluster of 5 tokens co-occurring in 6 state(s); collapsing them
-# newly fits 4 entrie(s) under the <=5 cap and removes 24 list item(s).
+# cluster of 5 tokens co-occurring in 6 states; collapsing them
+# newly fits 4 entries under the <=5 cap and removes 24 list items.
 [class <LABEL>]
 BLOCK
 IF
@@ -327,7 +327,8 @@ comments and blank lines anywhere. There are four sections, all optional:
 
 ```
 # Readable names for symbols whose derived name would be jargon or
-# ungrammatical. NAME = readable phrase.
+# ungrammatical. NAME = readable phrase, written as it reads in a list: a
+# singular phrase takes its article ("an identifier"), a plural one does not.
 [names]
 IDENT = an identifier
 stmts = statements
@@ -340,9 +341,12 @@ stmts = statements
 PLUS
 STAR
 
-# Extra opening delimiters. stele already treats any token whose alias begins
-# with '(', '[' or '{' as an opener; add a line here to also match a token by
-# its name. Format: OPENER_CHAR KIND ARG, where KIND is prefix | suffix | exact.
+# Openers the "missed delimiter hints" check in `stats` should know about.
+# Hints come from aliases alone: a token whose alias begins with '(', '[' or '{'
+# is an opener. A token matched here by name is not used for hints; it makes
+# `stats` report the states where it is open but no hint could be given, so you
+# can find the delimiters still missing an alias.
+# Format: OPENER_CHAR KIND ARG, where KIND is prefix | suffix | exact.
 [opener-nets]
 ( prefix LPAREN
 { exact LBRACE
@@ -406,7 +410,8 @@ good message with no further work.
 Two checks in `stats` catch the mechanical mistakes, and both should stay at
 zero. `jargon-rendered tokens` flags multi-word token names that fall through
 to step 6. `jargon-rendered nonterminals` flags step 4 names containing code
-abbreviations (`ctx`, `annot`, `opt`, `expr`, `instr`, …). Read the `names`
+abbreviations (`ctx`, `annot`, `opt`, `expr`, `instr`, …), including an element
+name that step 3 shows for its list. Read the `names`
 output from time to time to catch awkward names that they miss.
 
 Some ways to get better names from the grammar:
@@ -475,7 +480,7 @@ function_type(ctx):                (* ctx is unused: a phantom *)
 
 Use it as, say, `function_type(TYPE)` in types and `function_type(FN)` in the
 declaration. Menhir expands each use into a separate rule, so the states no
-longer merge and each place gets its own precise message ("Expecting '->', or
+longer merge and each place gets its own precise message ("Expecting '->' or
 '{'." for the declaration). There is still only one definition to maintain.
 
 Any two symbols the grammar already has will do as arguments; they never appear
@@ -515,7 +520,8 @@ separated by blank lines. In each block:
 - `#` lines are comments;
 - the first other line is the header, `entry_point: sentence`;
 - the rest is the message: one line, optionally followed by a
-  `<N>This '(' opens …` delimiter hint.
+  `<N>This '(' opens …` delimiter hint or a `<^N>this …` hedge subject. A
+  marker must start its line, and its depth must fall within the state's stack.
 
 For example, adapted from [`example/calc.overrides`](example/calc.overrides):
 
@@ -526,7 +532,8 @@ Expecting a program: a '{' block.
 ```
 
 **Stale entries fail the build.** An override whose sentence no longer matches
-any error state is an error, so the file cannot drift. When a grammar change
+any error state is an error, so the file cannot drift. So are two overrides for
+the same sentence, and an override with no message. When a grammar change
 creates a new "Syntax error" state, run `stele fallbacks`, paste the block it
 prints, and write the message in place of the placeholder.
 
@@ -583,14 +590,21 @@ diagnostic printer. Either works, since a label is just a span and a text.)
 (Advanced, and optional.) `%on_error_reduce` annotations decide which messages
 become hedges (see [What a message contains](#what-a-message-contains)), and the
 best set changes as a grammar grows. `stele tune` suggests changes to that set.
-It only recommends. It never edits your files, and it is not part of any test,
-since the golden files already guard the current state. Run it when the grammar
-has grown.
+It only recommends. It never edits your files, and it does not belong in your
+test suite, since the golden files already guard the current state (stele's own
+tests pin it on calc, whose trials take no time). Run it when the grammar has
+grown.
 
 Each trial copies the grammar to a scratch directory, adds or removes one
 annotation, re-runs menhir, regenerates the messages, and compares the quality
 counters. The scratch directory is removed afterwards, even on failure or
 Ctrl-C.
+
+The annotations can be laid out any way menhir accepts: one declaration or
+several, spread over lines, with comments. The tuner edits them in place, so
+each keeps its own declaration, and a grammar with none yet can still be
+advised on what to add. The timing goes to stderr, so the report on stdout can
+be pinned like any other output.
 
 There are three subcommands. All take `--grammar FILE.mly`, `--config`, and
 `--menhir CMD` (default `menhir`):
@@ -651,8 +665,22 @@ own sidecars.
   override.
 - **No delimiter hint appears** where you expected one. Hints come from token
   aliases: an opener's alias must begin with `(`, `[` or `{`, and a closer's must
-  end with `)`, `]` or `}`. Alias the delimiters, or add an
-  [`[opener-nets]`](#the-config-file) entry.
+  end with `)`, `]` or `}`. Alias the delimiters. An
+  [`[opener-nets]`](#the-config-file) entry does not create hints, but it makes
+  `stats` list the states where an unaliased opener is missing one.
+- **A message offers a token that cannot come next for this input**, such as
+  `')'` when no `(` is open (in the calc example, `{ 1 + 1 }` gets "Expecting
+  ')', ';', or an operator."). By default, menhir merges states that differ
+  only in what may follow them, so one error state can serve both `1 + 1` inside
+  parentheses and `1 + 1` in a statement, and its message lists what is legal
+  in either. The [soundness check](#what-a-message-contains) cannot catch this,
+  because the token really is accepted in that merged state. Running every
+  menhir command (`--list-errors`, `--cmly`, `--compile-errors`, and the parser
+  build itself) with `--canonical` keeps those states apart and makes such
+  messages exact ("Expecting ';' or an operator."), at the cost of more states
+  and a larger parser: calc goes from 9 error states to 14. The four commands
+  must agree; the `state/automaton item-set match` line in `stats` catches a
+  mismatch.
 - **The build fails naming a config or override entry.** The grammar changed and
   the entry refers to something that no longer exists. Fix or delete it.
 
@@ -661,21 +689,36 @@ own sidecars.
 ```
 stele/
   dune                       ; the `stele` executable
-  main.ml                    ; the generator (including `stele tune`)
-  parse_messages.ml{,i}      ; the --list-errors parser (a module of the exe)
+  main.ml                    ; the command line
+  parse_messages.ml{,i}      ; the --list-errors parser
+  util.ml                    ; shared sets, maps and helpers
+  grammar.ml                 ; the .cmly reader and the continuation walk
+  config.ml                  ; the config sidecar and its rot check
+  naming.ml                  ; turning symbols into words
+  delimiters.ml              ; opener/closer pairing and hint depths
+  overrides.ml               ; the overrides sidecar and its checks
+  generate.ml                ; the message for one error state
+  reports.ml                 ; stats, census, names, fallbacks, suggest-classes,
+                             ; transitions, and the soundness check
+  tune.ml                    ; `stele tune`
   runtime/                   ; the stele.runtime helper library
     parser_error_runtime.ml{,i}
     dune
   example/                   ; a complete, runnable calc example (copyable template)
     parser.mly  lexer.mll  calc.ml  ; grammar, lexer, and the parse+render driver
     calc.config  calc.overrides
-    calc.expected  calc.stats.expected  calc.names.expected  ; generator goldens
+    calc.expected  calc.stats.expected  calc.census.expected
+    calc.names.expected        ; generator goldens
+    calc.tune-advise.expected  ; the tuner's advice
     calc.run.*.expected        ; the driver's output on good and broken inputs
     ok.calc  unclosed.calc  stray.calc  garbage.calc  ; sample inputs
     calc-rot.config  calc-rot.expected  ; the stale-config check
     dune
   test/                      ; stele's own regression tests
-    delim/                   ; the delimiter-pairing grammar + runtime unit check
+    delim/                   ; the delimiter-pairing grammar + runtime unit checks
+    cli/                     ; review commands and error messages, on a grammar
+                             ; with more operators than the cap
+    tune/                    ; the tuner, on awkwardly laid-out annotations
   README.md  TUTORIAL.md  CHANGES.md  LICENSE
 ```
 
