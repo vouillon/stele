@@ -3,9 +3,10 @@
 Machine-generated, user-friendly syntax-error messages for any
 [Menhir](https://gitlab.inria.fr/fpottier/menhir) grammar.
 
-A Menhir parser that meets bad input raises `Error`, and most drivers report
-just "Syntax error". Menhir can show a real message instead, but only if you
-write one for every point where the parse can get stuck. A realistic grammar has
+A Menhir parser that meets bad input raises `Error`, which carries no
+explanation: the driver can say where the parse failed, but not what was
+expected there. Menhir can show a real message instead, but only if you write
+one for every point where the parse can get stuck. A realistic grammar has
 hundreds of them, and each needs revisiting whenever the grammar changes.
 
 stele writes those messages for you. It reads the grammar, works out what each
@@ -57,9 +58,6 @@ stele is a standard dune/opam project. You need OCaml (`>= 4.14`) and menhir.
 opam install stele
 ```
 
-To build from a source checkout instead, run `opam install .` (or just
-`dune build`).
-
 You get two things:
 
 - the `stele` executable, which generates the messages at build time;
@@ -95,10 +93,11 @@ The smallest useful setup needs no config and no golden files. Next to your
 You now have `Parser_messages.message : int -> string`, which maps each error
 state to a message. Call it from your parser's error handler.
 
-That is the whole loop. The next steps are to alias your tokens, improve the
-wording with a config file, pin golden files, and fill in the location markers
-at run time. The [tutorial](TUTORIAL.md) adds these one at a time, and
-[The pipeline](#the-pipeline-dune-rules) shows the full set of rules.
+That is enough to get a message for every error state. From there, you can
+alias your tokens, improve the wording with a config file, pin golden files,
+and fill in the location markers at run time. The [tutorial](TUTORIAL.md) adds
+these one at a time, and [The pipeline](#the-pipeline-dune-rules) shows the
+full set of rules.
 
 ## Key terms
 
@@ -129,7 +128,8 @@ For each error state, stele produces some of the following.
 
 - An Expecting list of what could legally come next, worked out from the
   grammar: "Expecting ')', ';', or an operator." It is capped at five items; a
-  state with more falls back to "Syntax error".
+  state with more falls back to "Syntax error", unless a `[class]` in the
+  [config file](#the-config-file) shortens the list or you write an override.
 - A **delimiter hint** pointing back at the `(`, `[` or `{` the parser is still
   inside: `<2>This '{' opens the enclosing construct.` The `<2>` is a
   placeholder that the [runtime helper](#the-runtime-helper) replaces with the
@@ -143,10 +143,11 @@ For each error state, stele produces some of the following.
 - A **hand-written override**, for the few states the heuristics cannot handle
   well (see [The overrides file](#the-overrides-file)).
 
-stele also checks its own output:
+stele works out each Expecting list from the grammar rather than reading it off
+the parser's tables, so it checks the result against the compiled parser:
 
-- a **soundness check** verifies, against the compiled parser, that every token a
-  message calls legal is legal in that state (`unsound claims` in `stats`);
+- a **soundness check** confirms that every token a message calls legal has an
+  action in that state (`unsound claims` in `stats`);
 - a **state-correspondence check** confirms that the `.messages` file and the
   `.cmly` number the states the same way (`state/automaton item-set match` in
   `stats`). stele combines its two inputs by state number, so if this check
@@ -244,8 +245,9 @@ class "an operator": collapsed in 3 entries
 The number is how many states had two or more of the class's members legal at
 once, so the class applied. It counts these states even when an override or the
 five-item cap keeps the label from being shown. Zero is allowed (a class
-can wait for a state that needs it), but because the line is pinned, a class
-that stops applying after a grammar change shows up as a diff.
+can wait for a state that needs it), but if you pin the `stats` output in a
+[golden file](#golden-files), a class that stops applying after a grammar change
+shows up as a diff.
 
 It also reports `names configured: X, unused: Y`, with a line for each
 `[names]` entry that nothing uses.
@@ -254,8 +256,8 @@ It also reports `names configured: X, unused: Y`, with a line for each
 
 `census` prints each distinct message once, with how often it occurs. The
 stack index in delimiter hints is written `<_>`, so if menhir picks a different
-sample sentence for a state, at most a count changes, and a wording change is a
-one-line diff.
+sample sentence for a state, at most a count changes. If you pin the `census`
+output in a [golden file](#golden-files), a wording change is a one-line diff.
 
 ### What `names` reports
 
@@ -280,8 +282,8 @@ Use it to find two things: awkward renderings that deserve a `[names]` entry
 
 `suggest-classes` prints candidate `[class]` blocks for the config file. It
 groups tokens that are always legal in the same states, so merging them under
-one label never hides a token a state needed. It keeps groups of three or more and ranks them by how
-many lists they would bring under the five-item cap:
+one label never hides a token a state needed. It keeps groups of three or more
+and ranks them by how many lists they would bring under the five-item cap:
 
 ```
 # cluster of 5 tokens co-occurring in 6 state(s); collapsing them
@@ -311,7 +313,7 @@ Pin three views of the output, each as its own golden file:
 After any grammar or generator change, run `dune runtest`, read the three
 diffs, then run `dune promote`. A message diff you agree with is fine. A `stats`
 counter that gets worse, with no message diff to justify it, means the change
-made the messages worse. Never edit a `.expected` file by hand.
+made the messages worse.
 
 ## The config file
 
@@ -404,9 +406,8 @@ good message with no further work.
 Two checks in `stats` catch the mechanical mistakes, and both should stay at
 zero. `jargon-rendered tokens` flags multi-word token names that fall through
 to step 6. `jargon-rendered nonterminals` flags step 4 names containing code
-abbreviations (`ctx`, `annot`, `opt`, `expr`, `instr`, …). Neither can judge
-English: "a call targets payload" passes both. Read the `names` output from
-time to time to catch those.
+abbreviations (`ctx`, `annot`, `opt`, `expr`, `instr`, …). Read the `names`
+output from time to time to catch awkward names that they miss.
 
 Some ways to get better names from the grammar:
 

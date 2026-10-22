@@ -1,4 +1,4 @@
-# Tutorial: from "Syntax error" to messages worth reading
+# Tutorial: from "Syntax error" to meaningful messages
 
 This walkthrough takes a tiny calculator grammar from
 [Menhir](https://gitlab.inria.fr/fpottier/menhir)'s bare "Syntax error" to the
@@ -18,8 +18,7 @@ driver, config, overrides and dune rules, all checked by `dune runtest`. When
 anything here is unclear, those files are the reference.
 
 **Before you start.** You should be able to run `menhir` and `dune`, and it
-helps to have written a Menhir grammar before. You need no parsing theory and no
-grammar of your own.
+helps to have written a Menhir grammar before.
 
 ## Stage 1: every error is "Syntax error"
 
@@ -51,8 +50,8 @@ none of that reaches the user.
 
 ## Stage 2: generate a message for every error state
 
-Four dune rules connect menhir to stele. They are the core of `example/dune`,
-minus options we have not met yet:
+Hooking stele into the build takes four dune rules. Here they are, taken from
+[`example/dune`](example/dune) without the options that later stages add:
 
 ```lisp
 (rule (with-stdout-to calc.auto.messages
@@ -74,8 +73,11 @@ In order, they:
    sample input per state;
 2. dump the grammar in a machine-readable form, the `.cmly` file;
 3. have stele write one message per error state;
-4. compile those messages into a `Parser_messages` module, which your driver
-   queries by state number.
+4. compile those messages into a `Parser_messages` module. Its function
+   `Parser_messages.message : int -> string` maps an error state's number to
+   its message. When the parser fails, your driver reads the current state
+   number from Menhir's incremental API (`I.current_state_number env`) and looks
+   up the message, as stage 4 shows.
 
 Input A now says:
 
@@ -91,7 +93,7 @@ name: a lowercase rule is shown as its name with an article, so grammar names
 leak straight into the message.
 
 Both are naming problems, and the next stages fix them in the grammar and
-its config, without touching stele.
+its config.
 
 ## Stage 3: alias the tokens so messages show source syntax
 
@@ -129,7 +131,7 @@ underline.
 The `<N>` marker can only be resolved while the parser is running, by the
 runtime helper in the `stele.runtime` library. Instantiate its functor over
 your parser's incremental API and call it from your error handler. This is from
-`calc.ml` in the example:
+the example's driver, [`example/calc.ml`](example/calc.ml):
 
 ```ocaml
 module I = Parser.MenhirInterpreter
@@ -143,7 +145,8 @@ module R = Parser_error_runtime.Make (struct
 end)
 
 (* In the HandlingError case, with the error [env] in hand: *)
-let main, labels = R.resolve ~source ~env (Parser_messages.message state)
+let msg = Parser_messages.message (I.current_state_number env) in
+let main, labels = R.resolve ~source ~env msg
 ```
 
 `labels` holds a source span and a text for each marker. Pass the message
@@ -236,8 +239,8 @@ STAR
 A class is used only when at least two of its members are legal, so a lone `+`
 keeps its own spelling.
 
-If an entry names a symbol the grammar no longer has, the build fails with a
-one-line error naming the entry.
+If an entry names a symbol the grammar no longer has, the build fails with an
+error naming the entry.
 
 Before adding a `[names]` entry, consider renaming the rule in the grammar
 instead. The README's [Naming](README.md#naming) section explains when each is
@@ -304,13 +307,17 @@ their consequences.
 
 ## Where you ended up
 
-The `example/` directory holds this tutorial's final state:
+The [`example/`](example/) directory holds this tutorial's final state:
 
-- the grammar `parser.mly`, the lexer `lexer.mll`, and the driver `calc.ml`;
-- the sidecars `calc.config` and `calc.overrides`;
-- the dune rules, in `dune`;
-- the generator's golden files `calc.expected`, `calc.stats.expected` and
-  `calc.names.expected`;
+- the grammar [`parser.mly`](example/parser.mly), the lexer
+  [`lexer.mll`](example/lexer.mll), and the driver
+  [`calc.ml`](example/calc.ml);
+- the sidecars [`calc.config`](example/calc.config) and
+  [`calc.overrides`](example/calc.overrides);
+- the dune rules, in [`dune`](example/dune);
+- the generator's golden files [`calc.expected`](example/calc.expected),
+  [`calc.stats.expected`](example/calc.stats.expected) and
+  [`calc.names.expected`](example/calc.names.expected);
 - the driver's output on one good and three broken inputs, as `calc.run.*`.
 
 It builds a runnable `calc` you can point at a file. The three inputs now
