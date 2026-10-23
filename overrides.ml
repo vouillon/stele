@@ -88,13 +88,19 @@ let validate_override_depths ~header body stack_suffix =
     (fun (kind, n) ->
       if n < 1 || n > n_cells then
         failwith
-          (Printf.sprintf
-             "override for %S: marker <%s%s> is out of range (stack suffix has \
-              %d cells)"
+          (Printf.sprintf "override for %S: marker <%s%s> is out of range: %s"
              header
              (match kind with `Hint -> "" | `Subject -> "^")
              (if n = max_int then "..." else string_of_int n)
-             n_cells))
+             (match n_cells with
+             | 0 -> "this state knows nothing of the parser's stack"
+             | 1 ->
+                 "this state only knows the top position of the parser's stack"
+             | k ->
+                 Printf.sprintf
+                   "this state only knows the top %d positions of the parser's \
+                    stack"
+                   k)))
     (markers body)
 
 (* Report an override whose sentence matches no generated entry: the file must

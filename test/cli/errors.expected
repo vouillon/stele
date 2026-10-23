@@ -6,7 +6,7 @@ Parsed 15 entries from ./ops.auto.messages
 stele: overrides ./empty.overrides: entry "main: INT LPAREN" has no message
 == override marker past the stack
 Parsed 15 entries from ./ops.auto.messages
-stele: override for "main: LPAREN INT LPAREN": marker <^9> is out of range (stack suffix has 2 cells)
+stele: override for "main: LPAREN INT LPAREN": marker <^9> is out of range: this state only knows the top 2 positions of the parser's stack
 == stale override
 Parsed 15 entries from ./ops.auto.messages
 stele: override for "main: INT INT INT" matches no error state (stale entry — remove or fix it)

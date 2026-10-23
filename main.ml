@@ -107,55 +107,54 @@ open Term.Syntax
    to every subcommand. *)
 let cmly_arg =
   let doc =
-    "Path to the grammar's $(b,.cmly) file (produced by $(b,menhir --cmly)): \
-     the source of exact productions, nullability, and token aliases. Required \
-     by every command."
+    "Path to the grammar's $(b,.cmly) file, written by $(b,menhir --cmly): \
+     stele reads the grammar's rules and token aliases from it. Required by \
+     every command."
   in
   Arg.(required & opt (some string) None & info [ "cmly" ] ~docv:"FILE" ~doc)
 
 let config_arg =
   let doc =
-    "Path to the grammar's $(b,.config) sidecar: readable names, token \
-     classes, opener-name nets, and extra wrapper rules. Optional; absent \
-     means no curated names and no classes."
+    "Path to the grammar's config file: readable names, token classes, and the \
+     other per-grammar settings the README describes. Optional."
   in
   Arg.(value & opt string "" & info [ "config" ] ~docv:"FILE" ~doc)
 
 let overrides_arg =
   let doc =
-    "Path to the grammar's hand-written $(b,.overrides) file: sentence-keyed \
-     replacement messages for the states heuristics cannot serve, merged after \
-     generation. An override whose sentence matches no error state fails the \
-     build. Optional."
+    "Path to the grammar's overrides file: hand-written messages that replace \
+     the generated ones, each keyed by the sample input of an error state. An \
+     override whose sample input matches no error state is an error. Optional."
   in
   Arg.(value & opt string "" & info [ "overrides" ] ~docv:"FILE" ~doc)
 
 let messages_arg =
   let doc =
-    "The grammar's $(b,menhir --list-errors) output: one representative error \
-     sentence per error state."
+    "The output of $(b,menhir --list-errors): every error state, with a sample \
+     input that reaches it."
   in
   Arg.(required & pos 0 (some string) None & info [] ~docv:"MESSAGES" ~doc)
 
 let no_comments_arg =
   let doc =
-    "Omit the auto-generated $(b,##) comments (state numbers, LR items), \
-     keeping only the sentence and message, and sort the output by sentence — \
-     the stable golden projection."
+    "Leave out menhir's $(b,##) comments (state numbers and grammar items) and \
+     sort the messages by sample input, so that the output stays the same when \
+     states are renumbered. Use this for the golden file."
   in
   Arg.(value & flag & info [ "no-comments" ] ~doc)
 
 let generate_cmd =
-  let doc = "Generate the error messages (one per error state)" in
+  let doc = "Write a message for every error state" in
   let man =
     [
       `S Manpage.s_description;
       `P
-        "Emit a syntax-error message for every error state in the \
-         $(i,MESSAGES) file: an $(b,Expecting) list of the legal \
-         continuations, a delimiter hint, and an $(b,Assuming ... complete) \
-         hedge where a reduction folded, with any hand overrides merged in. \
-         This is the output that $(b,menhir --compile-errors) turns into a \
+        "Write a syntax-error message for every error state in $(i,MESSAGES): \
+         what could come next (\"Expecting ...\"), a hint pointing at the \
+         opening delimiter the input is still inside, and, where the grammar \
+         uses $(b,%on_error_reduce), the construct the parser assumed complete \
+         (\"Assuming that ... is complete\"). Overrides replace the messages \
+         they cover. $(b,menhir --compile-errors) turns the output into a \
          $(b,Parser_messages) module.";
       `S Manpage.s_options;
     ]
@@ -172,16 +171,18 @@ let generate_cmd =
   Cmd.v (Cmd.info "generate" ~doc ~man) term
 
 let stats_cmd =
-  let doc = "Print the message-quality summary and self-lints" in
+  let doc = "Print counters that measure the messages' quality" in
   let man =
     [
       `S Manpage.s_description;
       `P
-        "Print the quality counters (entries, states with an expected list, \
-         fallbacks split by whether an override covers them, delimiter hints, \
-         missed hints, jargon, cascade depth) and the soundness-oracle lines, \
-         plus one dormancy line per configured token class. This is the \
-         ratchet: pin it as a golden and a regression fails the build.";
+        "Print how many error states get each kind of message (an Expecting \
+         list, an \"Assuming\" hedge, a bare \"Syntax error\"), how many \
+         delimiter hints there are and how many are missing, the names shown \
+         as jargon, and the checks of the messages against the parser's \
+         tables. A line per $(b,[class]) says how many states use it, and \
+         unused $(b,[names]) entries are listed. Pin the output in a golden \
+         file: a change that makes the messages worse then shows up as a diff.";
       `S Manpage.s_options;
     ]
   in
@@ -196,15 +197,15 @@ let stats_cmd =
   Cmd.v (Cmd.info "stats" ~doc ~man) term
 
 let census_cmd =
-  let doc = "Print the distinct message bodies with occurrence counts" in
+  let doc = "Print each distinct message once, with a count" in
   let man =
     [
       `S Manpage.s_description;
       `P
-        "Print each distinct message body once, prefixed by its occurrence \
-         count and sorted by message text (no sentences appear); the \
-         delimiter-hint depth is normalized to $(b,<_>). A wording change is a \
-         one-line diff; a sentence re-pick only bumps a count.";
+        "Print each distinct message once, with the number of error states \
+         that use it, sorted by message. Sample inputs do not appear, and \
+         marker positions are written $(b,<_>), so a wording change is a \
+         one-line diff, and a change of sample input at most changes a count.";
       `S Manpage.s_options;
     ]
   in
@@ -219,24 +220,18 @@ let census_cmd =
   Cmd.v (Cmd.info "census" ~doc ~man) term
 
 let names_cmd =
-  let doc =
-    "Review how every symbol is rendered, and find unused config names"
-  in
+  let doc = "Show how each symbol is turned into words" in
   let man =
     [
       `S Manpage.s_description;
       `P
-        "Print a table of every grammar symbol that surfaces in the emitted \
-         messages: its rendered form, the pipeline step that produced it \
-         (token alias, $(b,[names]) entry, the list-element chase, the \
-         Assuming-subject plural rendering, the lowercase auto-derivation, a \
-         $(b,[class]) label, or the quoted-lowercase fallback), and how often \
-         it appears in the Expecting list versus the Assuming subject. Usage \
-         is counted per position because a symbol can render differently in \
-         each. After the table, list any $(b,[names]) entries whose curated \
-         phrase won in neither position. The audit surface for two directions: \
-         awkward renderings that deserve a $(b,[names]) entry, and \
-         $(b,[names]) entries nothing uses.";
+        "Print a table of every grammar symbol a message shows: how it reads, \
+         which naming rule produced it (token alias, $(b,[names]) entry, \
+         element of a list or option, plural of that element, rule name, \
+         $(b,[class]) label, or token name), and how often it appears in an \
+         Expecting list and as the subject of an \"Assuming\" hedge. Then list \
+         the $(b,[names]) entries that nothing uses. Use it to find names that \
+         read badly, and config entries that can go.";
       `S Manpage.s_options;
     ]
   in
@@ -251,15 +246,16 @@ let names_cmd =
   Cmd.v (Cmd.info "names" ~doc ~man) term
 
 let fallbacks_cmd =
-  let doc = "Print .overrides templates for uncovered fallback states" in
+  let doc = "Print an override to fill in for each \"Syntax error\" state" in
   let man =
     [
       `S Manpage.s_description;
       `P
-        "Print a ready-to-paste $(b,.overrides) block for every \
-         generic-fallback (\"Syntax error\") state not yet covered by an \
-         override: the state's $(b,##) comments, the over-cap candidate list, \
-         and the sentence key. Empty output means every fallback is covered.";
+        "For every state whose message is a bare \"Syntax error\" and that no \
+         override covers, print a block to paste into the overrides file: \
+         menhir's comments on the state, what could come next there, the \
+         sample input that keys it, and a placeholder message. Empty output \
+         means every such state is covered.";
       `S Manpage.s_options;
     ]
   in
@@ -274,16 +270,17 @@ let fallbacks_cmd =
   Cmd.v (Cmd.info "fallbacks" ~doc ~man) term
 
 let suggest_classes_cmd =
-  let doc = "Propose token-class blocks for the config" in
+  let doc = "Propose [class] entries for the config" in
   let man =
     [
       `S Manpage.s_description;
       `P
-        "Propose new $(b,[class]) blocks for the $(b,--config) file by \
-         signature-clustering the raw expected sets: unclassed terminals that \
-         always co-occur, kept at three or more members, ranked by how many \
-         entries the collapse newly fits under the readable cap. Empty output \
-         means nothing co-occurs tightly enough to be worth a class.";
+        "Propose $(b,[class]) blocks for the config file: groups of three or \
+         more tokens, in no class yet, that are always accepted in the same \
+         error states, so that one label can stand for them without hiding a \
+         token. Groups are ranked by how many Expecting lists they would bring \
+         under the five-item limit. Empty output means no group is worth a \
+         class.";
       `S Manpage.s_options;
     ]
   in
@@ -298,14 +295,15 @@ let suggest_classes_cmd =
   Cmd.v (Cmd.info "suggest-classes" ~doc ~man) term
 
 let transitions_cmd =
-  let doc = "List every continuation of each error state (debug)" in
+  let doc = "List what could come next in each error state (debug)" in
   let man =
     [
       `S Manpage.s_description;
       `P
-        "List, per error state, all possible continuation symbols with \
-         lookahead and delimiter-depth annotations — a debugging view of the \
-         raw continuation computation.";
+        "For every error state, list each symbol that could come next, marking \
+         those that can only follow once the current construct is complete \
+         ($(b,[lookahead])) and, for a closing token, where its opening \
+         delimiter is. A view for debugging stele itself.";
       `S Manpage.s_options;
     ]
   in
@@ -324,28 +322,23 @@ let transitions_cmd =
    from [--grammar] via a [--menhir] subprocess, in a scratch dir. *)
 let grammar_arg =
   let doc =
-    "Path to the grammar's $(b,.mly) source. The tuner copies it into a \
-     scratch directory and edits its $(b,%on_error_reduce) declarations for \
-     each trial; the source tree is never touched. One grammar per invocation."
+    "Path to the grammar's $(b,.mly) file. Each trial edits a copy in a \
+     temporary directory; your file is never changed."
   in
   Arg.(required & opt (some string) None & info [ "grammar" ] ~docv:"FILE" ~doc)
 
 let menhir_arg =
   let doc =
-    "The $(b,menhir) command to run for each trial (a runtime subprocess: \
-     $(b,--list-errors) and $(b,--cmly)). It may carry flags, separated by \
+    "The menhir command each trial runs. It may carry flags, separated by \
      spaces, such as $(b,\"menhir --canonical\") for a grammar built with \
-     $(b,--canonical). A clear error is reported if it does not run."
+     $(b,--canonical)."
   in
   Arg.(value & opt string "menhir" & info [ "menhir" ] ~docv:"CMD" ~doc)
 
 let verdicts_arg =
   let doc =
-    "Path to a recorded keep/remove log: lines $(b,keep NONTERMINAL) / \
-     $(b,removed NONTERMINAL) ($(b,#) comments and blanks ignored). Removing a \
-     $(b,keep) annotation and re-adding a $(b,removed) one must each score \
-     non-improving; the command reports the agreement fraction and every \
-     disagreement."
+    "Path to a log of past decisions: one $(b,keep RULE) or $(b,removed RULE) \
+     per line; $(b,#) comments and blank lines are ignored."
   in
   Arg.(
     required & opt (some string) None & info [ "verdicts" ] ~docv:"FILE" ~doc)
@@ -356,11 +349,10 @@ let tune_dead_cmd =
     [
       `S Manpage.s_description;
       `P
-        "Remove each current $(b,%on_error_reduce) annotation in turn and \
-         regenerate; an annotation whose removal leaves the stats, census, and \
-         message projection all unchanged is dead and reported for deletion. \
-         Trials run override-free (an annotation change re-picks the \
-         sentence-keyed overrides), so nothing but the annotation moves.";
+        "Remove each $(b,%on_error_reduce) annotation in turn, and report \
+         those whose removal changes no message at all: they can be deleted. \
+         Annotations that menhir ignores (on $(b,%inline) symbols) are \
+         reported too.";
       `S Manpage.s_options;
     ]
   in
@@ -374,27 +366,27 @@ let tune_dead_cmd =
   Cmd.v (Cmd.info "dead" ~doc ~man) term
 
 let tune_advise_cmd =
-  let doc = "Rank single add/remove moves by their stats-vector delta" in
+  let doc = "Try adding or removing each annotation, and rate the result" in
   let man =
     [
       `S Manpage.s_description;
       `P
-        "For each single move — removing a current annotation, or adding one \
-         for a nonterminal reduced somewhere in the automaton — compute the \
-         stats-vector delta and classify it. A move is $(b,harmful) when it \
-         adds a \"Syntax error\" fallback, an unsound claim, an uncovered \
-         token or a missed hint, or loses a delimiter hint. Otherwise it is \
-         $(b,improving) when it removes a fallback, an uncovered token or an \
-         \"Assuming ...\" hedge; new jargon names (fixed by a config entry) \
-         are then only a caveat, but make harmful a move with no such gain. A \
-         move that gains hints or un-stacks deep \"Assuming ...\" messages \
-         while adding hedges is $(b,mixed); one that changes no message is \
-         $(b,dead); anything else is $(b,neutral). Each improving move is \
-         priced by its $(b,override-rot) cost (the $(b,--overrides) keys the \
-         trial's state re-pick would strand); a move whose whole win lands on \
-         already-overridden states is reported separately as \
-         $(b,RELOCATES-OVERRIDDEN). The tuner recommends; it never applies, \
-         and single-move scores do not compose.";
+        "Try each single change: removing an annotation, or adding one for a \
+         rule the parser reduces somewhere. Each change is rated by how the \
+         messages change. It is $(b,harmful) if some state gets a bare \
+         \"Syntax error\" or loses a delimiter hint, or if a message lists a \
+         token the parser would reject or leaves out one it accepts. Otherwise \
+         it is $(b,improving) if it removes a \"Syntax error\", a left-out \
+         token or an \"Assuming\" hedge; names it would show as jargon are \
+         then listed as a caveat, since a config entry fixes them, and only \
+         make harmful a change that improves nothing. A change that adds \
+         hedges but gains delimiter hints or shortens long chains of hedges is \
+         $(b,mixed); one that changes no message is $(b,dead); anything else \
+         is $(b,neutral). An improving change whose whole gain lands on states \
+         you already wrote overrides for is listed apart, as \
+         $(b,RELOCATES-OVERRIDDEN). The tuner only recommends: apply one \
+         change and run it again, since the ratings of several changes do not \
+         add up.";
       `S Manpage.s_options;
     ]
   in
@@ -409,16 +401,17 @@ let tune_advise_cmd =
   Cmd.v (Cmd.info "advise" ~doc ~man) term
 
 let tune_calibrate_cmd =
-  let doc = "Replay a recorded keep/remove log and report agreement" in
+  let doc = "Check the tuner against past decisions" in
   let man =
     [
       `S Manpage.s_description;
       `P
-        "Replay a recorded keep/remove verdict log ($(b,--verdicts)): removing \
-         each $(b,keep) annotation and re-adding each $(b,removed) one should \
-         score non-improving. Report the agreement fraction and every \
-         disagreement — the way to confirm the classifier still reproduces a \
-         trusted human audit after the grammar or the stats have changed.";
+        "Replay a log of past decisions ($(b,--verdicts)): removing a \
+         $(b,keep) annotation, or adding back a $(b,removed) one, should not \
+         rate as improving. Report how often the tuner agrees, and each \
+         disagreement, including verdicts that no longer match the grammar. \
+         Use it to check that the ratings still match your judgement after the \
+         grammar or stele has changed.";
       `S Manpage.s_options;
     ]
   in
@@ -433,22 +426,22 @@ let tune_calibrate_cmd =
   Cmd.v (Cmd.info "calibrate" ~doc ~man) term
 
 let tune_cmd =
-  let doc = "Advise on %on_error_reduce annotation moves (read-only)" in
+  let doc = "Suggest changes to the %on_error_reduce annotations" in
   let man =
     [
       `S Manpage.s_description;
       `P
-        "A read-only advisor for a grammar's $(b,%on_error_reduce) list. Each \
-         trial re-runs $(b,menhir) (a subprocess) on a scratch copy of the \
-         grammar with one annotation added or removed, regenerates the \
-         messages in-process, and classifies the move by its effect on the \
-         quality counters. It recommends moves; it never applies them and \
-         never touches the source tree.";
+        "Suggest changes to the grammar's $(b,%on_error_reduce) annotations, \
+         which decide where a message says \"Assuming that ... is complete\". \
+         Each trial adds or removes one annotation in a temporary copy of the \
+         grammar, runs menhir on it, regenerates the messages, and compares \
+         them with the current ones. The tuner only recommends; it never \
+         changes your files.";
       `P
-        "Trials run WITHOUT the $(b,.overrides) file: an annotation change \
-         re-picks the sentence-keyed overrides, so a trial that loaded them \
-         could fail the rot guard. $(b,tune advise) still reads them (via \
-         $(b,--overrides)) to price each improving move's override-rot cost.";
+        "Trials leave out the overrides file, because a changed annotation can \
+         change the sample inputs that key the overrides. $(b,tune advise) \
+         still reads it, to tell you which overrides a change would make you \
+         re-key.";
       `S Manpage.s_commands;
     ]
   in
@@ -462,22 +455,21 @@ let main_cmd =
     [
       `S Manpage.s_description;
       `P
-        "stele turns a Menhir grammar's $(b,--list-errors) output and its \
-         $(b,.cmly) into readable syntax-error messages, guarded by promoted \
-         golden files so a grammar change shows up as a reviewable message \
-         diff rather than silent staleness.";
+        "stele writes the syntax-error messages of a Menhir grammar, one per \
+         error state, saying what could come next. Pin them in golden files, \
+         and a grammar change shows up as a diff of the messages to review.";
       `P
-        "Every command reads the same inputs: the $(b,--cmly) grammar \
-         (required), an optional $(b,--config) sidecar, an optional \
-         $(b,--overrides) file, and the positional $(i,MESSAGES) file (the \
-         $(b,menhir --list-errors) output).";
+        "Every command except $(b,tune) reads the same inputs: the grammar's \
+         $(b,.cmly) file ($(b,--cmly), required), an optional config file \
+         ($(b,--config)), an optional overrides file ($(b,--overrides)), and \
+         the output of $(b,menhir --list-errors) ($(i,MESSAGES)).";
       `S Manpage.s_commands;
       `S Manpage.s_examples;
       `P "Generate the messages for $(b,menhir --compile-errors):";
       `Pre
         "  $(mname) generate --cmly g.cmly --config g.config --overrides \
          g.overrides g.messages";
-      `P "Print the quality ratchet:";
+      `P "Print the quality counters:";
       `Pre "  $(mname) stats --cmly g.cmly --config g.config g.messages";
     ]
   in

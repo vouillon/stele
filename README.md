@@ -148,10 +148,10 @@ stele works out each Expecting list from the grammar rather than reading it off
 the parser's tables, so it checks the result against the compiled parser:
 
 - a **soundness check** confirms that every token a message calls legal has an
-  action in that state (`unsound claims` in `stats`);
+  action in that state (`listed tokens the parser rejects` in `stats`);
 - a **state-correspondence check** confirms that the `.messages` file and the
-  `.cmly` number the states the same way (`state/automaton item-set match` in
-  `stats`). stele combines its two inputs by state number, so if this check
+  `.cmly` number the states the same way (`states numbered as in the .cmly`
+  in `stats`). stele combines its two inputs by state number, so if this check
   fails, every message is suspect.
 
 ## The pipeline (dune rules)
@@ -233,14 +233,16 @@ take tens of seconds, so keep them out of `runtest`.
 
 ### What `stats` reports
 
-`stats` prints counts of: entries, entries with an Expecting list, fallbacks
-(empty or over the cap, split by whether an override covers them), delimiter
-hints, missed hints, jargon, cascade depth, and the soundness check results.
+`stats` prints counts of: error states, those with an Expecting list or an
+"Assuming" hedge, those left with a bare "Syntax error" (with nothing to list,
+or more than five items) that no override covers, delimiter hints and missed
+ones, names shown as jargon, how many constructs a hedge assumes at most, and
+the results of the checks against the parser's tables.
 
 It ends with one line per configured class, in file order:
 
 ```
-class "an operator": collapsed in 3 entries
+class "an operator": applies in 3 states
 ```
 
 The number is how many states had two or more of the class's members legal at
@@ -265,9 +267,9 @@ output in a [golden file](#golden-files), a wording change is a one-line diff.
 A table of every symbol that appears in a message, showing:
 
 - how it is rendered;
-- which [naming](#naming) rule produced it (token alias, `[names]` entry, list
-  element, hedge subject, derived from the rule name, `[class]` label, or the
-  quoted fallback);
+- which [naming](#naming) rule produced it: `token alias`, `[names]`,
+  `element` (of a list or option), `plural of element` (a list as a hedge
+  subject), `rule name`, `[class]`, or `token name`;
 - how often it appears in the Expecting list and as a hedge subject.
 
 The two positions are counted separately because a symbol can read differently
@@ -287,8 +289,8 @@ one label never hides a token a state needed. It keeps groups of three or more
 and ranks them by how many lists they would bring under the five-item cap:
 
 ```
-# cluster of 5 tokens co-occurring in 6 states; collapsing them
-# newly fits 4 entries under the <=5 cap and removes 24 list items.
+# 5 tokens always accepted together, in 6 states. One label for them
+# brings 4 Expecting lists under the five-item limit and removes 24 items.
 [class <LABEL>]
 BLOCK
 IF
@@ -416,11 +418,11 @@ expression can start with, so a rule name that reads as a noun phrase gives a
 good message with no further work.
 
 Two checks in `stats` catch the mechanical mistakes, and both should stay at
-zero. `jargon-rendered tokens` flags multi-word token names that fall through
-to step 6. `jargon-rendered nonterminals` flags step 4 names containing code
+zero. `tokens shown as jargon` flags multi-word token names that fall through
+to step 6. `rule names shown as jargon` flags step 4 names containing code
 abbreviations (`ctx`, `annot`, `opt`, `expr`, `instr`, …), including an element
-name that step 3 shows for its list. Read the `names`
-output from time to time to catch awkward names that they miss.
+name that step 3 shows for its list. Read the `names` output from time to time
+to catch awkward names that they miss.
 
 Some ways to get better names from the grammar:
 
@@ -560,9 +562,10 @@ operator."
 - **Run menhir with `--canonical`**, which merges no state at all. Use it on
   every menhir command (`--list-errors`, `--cmly`, `--compile-errors`, and the
   parser build itself, and `stele tune --menhir "menhir --canonical"`); the
-  `state/automaton item-set match` line in `stats` catches a mismatch. This needs no grammar change, but it splits every state
-  in the grammar, not just the ones whose messages suffer, so on a large
-  grammar the parser can grow a lot.
+  `states numbered as in the .cmly` line in `stats` catches a mismatch. This
+  needs no grammar change, but it splits every state in the grammar, not just
+  the ones whose messages suffer, so on a large grammar the parser can grow a
+  lot.
 
 Nothing flags these messages automatically yet, and `stele tune` rates the
 `%on_error_reduce` fix as neutral, because none of its counters move. You find
@@ -667,8 +670,8 @@ The annotations can be laid out any way menhir accepts: one declaration or
 several, spread over lines, with comments. The tuner edits them in place, so
 each keeps its own declaration, and a grammar with none yet can still be
 advised on what to add. Menhir ignores an annotation on an `%inline` symbol,
-with a warning; the tuner reports it as dead. The timing goes to stderr, so the report on stdout can
-be pinned like any other output.
+with a warning; the tuner reports it as dead. The timing goes to stderr, so
+the report on stdout can be pinned like any other output.
 
 There are three subcommands. All take `--grammar FILE.mly`, `--config`, and
 `--menhir CMD` (default `menhir`). `CMD` may carry flags separated by spaces,
@@ -737,8 +740,8 @@ own sidecars.
   error"). Run `stele suggest-classes` for `[class]` candidates, or write an
   override.
 - **No delimiter hint appears** where you expected one. Hints come from token
-  aliases: an opener's alias must begin with `(`, `[` or `{`, and a closer's must
-  end with `)`, `]` or `}`. Alias the delimiters. An
+  aliases: an opener's alias must begin with `(`, `[` or `{`, and a closer's
+  must end with `)`, `]` or `}`. Alias the delimiters. An
   [`[opener-nets]`](#the-config-file) entry does not create hints, but it makes
   `stats` list the states where an unaliased opener is missing one.
 - **A message offers a token that cannot come next for this input**, such as

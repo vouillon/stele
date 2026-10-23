@@ -12,7 +12,7 @@
 ## The known suffix of the stack is as follows:
 ## expr GT expr
 ##
-# Candidates (8): ')', '*', '+', '-', '/', ';', '<', '>'
+# Could come next (8): ')', '*', '+', '-', '/', ';', '<', '>'
 main: INT GT INT LPAREN
 <YOUR SYNTAX ERROR MESSAGE HERE>
 
@@ -30,7 +30,7 @@ main: INT GT INT LPAREN
 ## The known suffix of the stack is as follows:
 ## expr
 ##
-# Candidates (7): '*', '+', '-', '/', ';', '<', '>'
+# Could come next (7): '*', '+', '-', '/', ';', '<', '>'
 main: INT LPAREN
 <YOUR SYNTAX ERROR MESSAGE HERE>
 
@@ -48,7 +48,7 @@ main: INT LPAREN
 ## The known suffix of the stack is as follows:
 ## expr LT expr
 ##
-# Candidates (8): ')', '*', '+', '-', '/', ';', '<', '>'
+# Could come next (8): ')', '*', '+', '-', '/', ';', '<', '>'
 main: INT LT INT LPAREN
 <YOUR SYNTAX ERROR MESSAGE HERE>
 
@@ -66,7 +66,7 @@ main: INT LT INT LPAREN
 ## The known suffix of the stack is as follows:
 ## expr MINUS expr
 ##
-# Candidates (8): ')', '*', '+', '-', '/', ';', '<', '>'
+# Could come next (8): ')', '*', '+', '-', '/', ';', '<', '>'
 main: INT MINUS INT LPAREN
 <YOUR SYNTAX ERROR MESSAGE HERE>
 
@@ -84,7 +84,7 @@ main: INT MINUS INT LPAREN
 ## The known suffix of the stack is as follows:
 ## expr PLUS expr
 ##
-# Candidates (8): ')', '*', '+', '-', '/', ';', '<', '>'
+# Could come next (8): ')', '*', '+', '-', '/', ';', '<', '>'
 main: INT PLUS INT LPAREN
 <YOUR SYNTAX ERROR MESSAGE HERE>
 
@@ -102,7 +102,7 @@ main: INT PLUS INT LPAREN
 ## The known suffix of the stack is as follows:
 ## LPAREN expr
 ##
-# Candidates (7): ')', '*', '+', '-', '/', '<', '>'
+# Could come next (7): ')', '*', '+', '-', '/', '<', '>'
 main: LPAREN INT LPAREN
 <YOUR SYNTAX ERROR MESSAGE HERE>
 

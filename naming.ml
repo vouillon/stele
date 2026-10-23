@@ -22,13 +22,13 @@ type name_source =
   | Fallback
 
 let source_label = function
-  | Alias -> "alias"
+  | Alias -> "token alias"
   | Names_entry -> "[names]"
-  | Chase -> "list-element"
-  | Plural_subject -> "plural-subject"
-  | Auto -> "auto-derived"
+  | Chase -> "element"
+  | Plural_subject -> "plural of element"
+  | Auto -> "rule name"
   | Class_label -> "[class]"
-  | Fallback -> "quoted-fallback"
+  | Fallback -> "token name"
 
 (* Where a rendered name appears. Usage is counted per position because a symbol
    can render differently in each — a list-shaped nonterminal singularises via

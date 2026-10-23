@@ -84,8 +84,8 @@
  (action
   (diff calc.stats.expected calc.stats)))
 
-; The names review: every rendered symbol with its provenance
-; (alias / [names] / [class] / auto-derived / quoted-fallback) and per-position
+; The names review: every rendered symbol with the naming rule that produced
+; it (token alias / [names] / [class] / rule name / token name) and per-position
 ; usage, then any [names] entries that fired in neither position. Here `stmts`
 ; is [names]-rendered only as an Assuming subject (0 expecting, 1 assuming) —
 ; the positional subtlety the mode exists to surface — and nothing is unused.

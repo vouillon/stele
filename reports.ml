@@ -225,10 +225,10 @@ let nonterminal_jargon stats =
    improvements are accepted with `dune promote`. *)
 let output_stats cfg gram auto results =
   let count f = List.length (List.filter (fun (_, s) -> f s) results) in
-  Printf.printf "entries: %d\n" (List.length results);
-  Printf.printf "with an expected list: %d\n" (count (fun s -> s.expecting));
-  Printf.printf "using the spurious-reduction template: %d\n"
-    (count (fun s -> s.assuming));
+  Printf.printf "error states: %d\n" (List.length results);
+  Printf.printf "with an \"Expecting\" list: %d\n"
+    (count (fun s -> s.expecting));
+  Printf.printf "with an \"Assuming\" hedge: %d\n" (count (fun s -> s.assuming));
   (* Cascade depth = the number of spurious reductions folded before the error
      is reported (the length of the "Assuming …" chain). A deep cascade means
      the hedge names a construct far from where the user was editing, so these
@@ -239,17 +239,18 @@ let output_stats cfg gram auto results =
         List.length entry.Parse_messages.data.spurious_reductions)
       results
   in
-  Printf.printf "entries with cascade depth >= 4: %d\n"
+  Printf.printf "hedges assuming 4 or more constructs: %d\n"
     (List.length (List.filter (fun d -> d >= 4) cascade_depths));
-  Printf.printf "max cascade depth: %d\n" (List.fold_left max 0 cascade_depths);
+  Printf.printf "most constructs assumed by one hedge: %d\n"
+    (List.fold_left max 0 cascade_depths);
   (* Hand-written overrides. The fallback counters below exclude these
      (their [overflow_expected]/[empty_expected] are forced false), so
      "not overridden" is the new ratchet target: a genuinely un-overridable
      enumeration state that still degrades to "Syntax error". *)
   Printf.printf "overridden: %d\n" (count (fun s -> s.overridden));
-  Printf.printf "generic fallback (empty expected list, not overridden): %d\n"
+  Printf.printf "\"Syntax error\", nothing to list (not overridden): %d\n"
     (count (fun s -> s.empty_expected));
-  Printf.printf "generic fallback (expected list over 5, not overridden): %d\n"
+  Printf.printf "\"Syntax error\", over 5 to list (not overridden): %d\n"
     (count (fun s -> s.overflow_expected));
   Printf.printf "delimiter hints: %d\n" (count (fun s -> s.hinted));
   let missed =
@@ -258,7 +259,7 @@ let output_stats cfg gram auto results =
         List.map (fun closer -> (closer, entry)) s.missed_hints)
       results
   in
-  Printf.printf "missed delimiter hints (opener on stack, none matched): %d\n"
+  Printf.printf "missed delimiter hints (an opener is open, but no hint): %d\n"
     (List.length missed);
   List.iter
     (fun (closer, entry) ->
@@ -270,7 +271,7 @@ let output_stats cfg gram auto results =
       (fun acc (_, s) -> StringSet.union acc s.jargon)
       StringSet.empty results
   in
-  Printf.printf "jargon-rendered tokens: %d\n" (StringSet.cardinal jargon);
+  Printf.printf "tokens shown as jargon: %d\n" (StringSet.cardinal jargon);
   StringSet.iter (fun s -> Printf.printf "  %s\n" s) jargon;
   (* The nonterminal counterpart. The token lint above cannot see these: it opens
      with [String.uppercase_ascii s = s], true only of a terminal, so a nonterminal
@@ -280,13 +281,13 @@ let output_stats cfg gram auto results =
      auto-derived name a shown message uses, so it fires wherever the leak actually
      surfaces. *)
   let nt_jargon = nonterminal_jargon (List.map snd results) in
-  Printf.printf "jargon-rendered nonterminals: %d\n"
+  Printf.printf "rule names shown as jargon: %d\n"
     (StringSet.cardinal nt_jargon);
   StringSet.iter (fun s -> Printf.printf "  %s\n" s) nt_jargon;
 
   (* Soundness oracle: claims-vs-automaton. *)
   let matched, total = check_correspondence auto (List.map fst results) in
-  Printf.printf "state/automaton item-set match: %d/%d\n" matched total;
+  Printf.printf "states numbered as in the .cmly: %d/%d\n" matched total;
   let oracle = List.map (fun r -> (r, check_entry gram auto r)) results in
   let unsound_claims =
     List.concat_map
@@ -294,7 +295,8 @@ let output_stats cfg gram auto results =
         List.map (fun sym -> (sym, entry)) unsound)
       oracle
   in
-  Printf.printf "unsound claims: %d\n" (List.length unsound_claims);
+  Printf.printf "listed tokens the parser rejects: %d\n"
+    (List.length unsound_claims);
   List.iter
     (fun (sym, entry) ->
       Printf.printf "  %s %s: %s\n" sym entry.Parse_messages.entry_point
@@ -308,9 +310,9 @@ let output_stats cfg gram auto results =
       (fun acc (_, (_, unc)) -> acc + StringSet.cardinal unc)
       0 oracle
   in
-  Printf.printf "entries with uncovered actions: %d\n"
+  Printf.printf "lists missing an accepted token: %d\n"
     (List.length with_uncovered);
-  Printf.printf "uncovered action tokens (total): %d\n" total_uncovered;
+  Printf.printf "accepted tokens missing (total): %d\n" total_uncovered;
   if List.length with_uncovered < 15 then
     List.iter
       (fun ((entry, _), (_, unc)) ->
@@ -329,7 +331,7 @@ let output_stats cfg gram auto results =
      prints nothing. *)
   List.iter
     (fun (label, _) ->
-      Printf.printf "class %S: collapsed in %d entries\n" label
+      Printf.printf "class %S: applies in %d states\n" label
         (count (fun s -> StringSet.mem label s.collapsed_classes)))
     cfg.classes;
   (* Names-staleness ratchet: the [names] mode counts, per configured
@@ -472,12 +474,12 @@ let output_fallbacks results =
     |> List.sort (fun (e1, _) (e2, _) ->
         String.compare (header_of e1) (header_of e2))
   in
-  Printf.eprintf "%d fallback state(s) without an override\n"
+  Printf.eprintf "%d \"Syntax error\" state(s) without an override\n"
     (List.length fallbacks);
   List.iter
     (fun (entry, stat) ->
       List.iter print_endline entry.Parse_messages.original_comments;
-      Printf.printf "# Candidates (%d): %s\n"
+      Printf.printf "# Could come next (%d): %s\n"
         (List.length stat.fallback_symbols)
         (String.concat ", " stat.fallback_symbols);
       Printf.printf "%s\n<YOUR SYNTAX ERROR MESSAGE HERE>\n\n" (header_of entry))
@@ -576,19 +578,20 @@ let output_suggest_classes cfg results =
         else compare m1 m2)
       clusters
   in
-  Printf.eprintf "%d candidate class cluster(s) (>=3 co-occurring terminals)\n"
-    (List.length ranked);
+  Printf.eprintf "%d %s worth a [class] (3 or more always accepted together)\n"
+    (List.length ranked)
+    (if List.length ranked = 1 then "group of tokens" else "groups of tokens");
   List.iter
     (fun (members, k, states, newly_fits, reduction) ->
       let plural n word words = if n = 1 then word else words in
       Printf.printf
-        "# cluster of %d tokens co-occurring in %d %s; collapsing them\n" k
+        "# %d tokens always accepted together, in %d %s. One label for them\n" k
         states
         (plural states "state" "states");
       Printf.printf
-        "# newly fits %d %s under the <=5 cap and removes %d list %s.\n"
+        "# brings %d Expecting %s under the five-item limit and removes %d %s.\n"
         newly_fits
-        (plural newly_fits "entry" "entries")
+        (plural newly_fits "list" "lists")
         reduction
         (plural reduction "item" "items");
       Printf.printf "[class <LABEL>]\n";

@@ -1,5 +1,5 @@
-# cluster of 6 tokens co-occurring in 6 states; collapsing them
-# newly fits 6 entries under the <=5 cap and removes 30 list items.
+# 6 tokens always accepted together, in 6 states. One label for them
+# brings 6 Expecting lists under the five-item limit and removes 30 items.
 [class <LABEL>]
 GT
 LT

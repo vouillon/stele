@@ -15,8 +15,8 @@ neutral, because none of its counters move.
 Proposal: also read a `.cmly` built with `--canonical`. Replay each entry's
 sample sentence through the canonical tables, and flag every claimed token the
 canonical parser rejects after that sentence. Report the count in `stats` (and
-the entries, like `unsound claims`), and add it to the tuner's score so that a
-move that clears some is "improving". The check is one-sided: it only tests
+the entries, like `listed tokens the parser rejects`), and add it to the
+tuner's score so that a move that clears some is "improving". The check is one-sided: it only tests
 menhir's sample sentence, so it can miss cases, but anything it flags is a real
 wrong message.
 
