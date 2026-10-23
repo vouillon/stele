@@ -167,6 +167,11 @@ let names_fire_counts cfg uses =
       (match pos with Expecting -> (e + 1, a) | Assuming -> (e, a + 1))
       m
   in
+  (* The entry that named [sym]: its own, else its base name's (see
+     [Naming.names_entry]). *)
+  let key sym =
+    if Hashtbl.mem cfg.names sym then sym else base_symbol_name sym
+  in
   let counts =
     List.fold_left
       (fun m u ->
@@ -174,11 +179,12 @@ let names_fire_counts cfg uses =
            the element a chase resolved to (credited so [local_decl] under the
            [locals] chase is not mis-flagged as unused). *)
         let m =
-          if u.nu_source = Names_entry then bump u.nu_symbol u.nu_position m
+          if u.nu_source = Names_entry then
+            bump (key u.nu_symbol) u.nu_position m
           else m
         in
         match u.nu_credit with
-        | Some (elem, Names_entry) -> bump elem u.nu_position m
+        | Some (elem, Names_entry) -> bump (key elem) u.nu_position m
         | _ -> m)
       StringMap.empty uses
   in
@@ -421,7 +427,9 @@ let output_names ~overrides_active cfg results =
    census. Kept verbatim, the depth would fragment one wording into several
    census entries. *)
 let census_normalize body =
-  Str.global_replace (Str.regexp "<\\(\\^?\\)[0-9]+>") "<\\1_>" body
+  (* Only at the start of a line, where the runtime reads markers (see
+     [Overrides.markers]); a '<3>' elsewhere is prose. *)
+  Str.global_replace (Str.regexp "^<\\(\\^?\\)[0-9]+>") "<\\1_>" body
 
 (* Each distinct (depth-normalized) message body with its occurrence count,
    sorted by the message text. *)

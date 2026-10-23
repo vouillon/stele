@@ -87,32 +87,74 @@ let classify_symbol cfg s =
 let is_plural_phrase phrase =
   match List.rev (String.split_on_char ' ' phrase) with
   | last :: _ ->
-      String.length last > 1
-      && last.[String.length last - 1] = 's'
-      && not (List.mem last [ "as"; "is"; "this"; "plus"; "minus"; "address" ])
+      let n = String.length last in
+      let ends suf =
+        let ls = String.length suf in
+        n >= ls && String.sub last (n - ls) ls = suf
+      in
+      n > 1 && ends "s"
+      (* "access", "status", "axis", "alias": singular nouns ending in 's'. *)
+      && (not (ends "ss" || ends "us" || ends "is"))
+      && not (List.mem last [ "as"; "alias"; "atlas"; "canvas"; "news" ])
   | [] -> false
+
+(* Is [s] a rule (nonterminal) name? Menhir requires a terminal name to start
+   with an uppercase letter and a nonterminal name not to, so the first letter
+   decides, whatever case the rest uses ([typeAlias]). *)
+let is_rule_name s =
+  String.length s > 0 && match s.[0] with 'A' .. 'Z' -> false | _ -> true
+
+(* The words of a rule name: split at underscores and at camelCase humps, all
+   lowercase ([type_alias] and [typeAlias] give "type alias", [XMLNode] gives
+   "xml node"). *)
+let rule_name_words s =
+  let n = String.length s in
+  let is_upper c = c >= 'A' && c <= 'Z' in
+  let is_lower c = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') in
+  let b = Buffer.create (n + 8) in
+  String.iteri
+    (fun i c ->
+      if c = '_' then Buffer.add_char b ' '
+      else begin
+        if
+          is_upper c && i > 0
+          && (is_lower s.[i - 1]
+             || (is_upper s.[i - 1] && i + 1 < n && is_lower s.[i + 1]))
+        then Buffer.add_char b ' ';
+        Buffer.add_char b (Char.lowercase_ascii c)
+      end)
+    s;
+  String.split_on_char ' ' (Buffer.contents b) |> List.filter (fun p -> p <> "")
+
+(* The [names] entry for a symbol: one for the symbol itself, else, for a
+   parameterized rule ([function_type(in_type)]), one for its base name
+   ([function_type]), which covers every instantiation. *)
+let names_entry cfg s =
+  match special_name cfg s with
+  | Some name -> Some name
+  | None -> special_name cfg (base_symbol_name s)
 
 (* Core rendering with provenance. Returns the readable string paired
    with the pipeline step that produced it; [get_readable_name] projects the
-   string. Precedence: token alias, [names] entry, lowercase auto-derivation,
-   quoted-lowercase fallback. *)
+   string. Precedence: token alias, [names] entry, a rule name turned into
+   words, quoted-lowercase fallback for a token. *)
 let get_readable_name_src cfg terminals s =
   match Hashtbl.find_opt terminals s with
   | Some a -> (Printf.sprintf "'%s'" a, Alias)
   | None -> (
       (* An opaque parameterized instantiation (a phantom-parameter split like
-         [function_type(in_type)]) renders by its base head: the [names] lookup
-         and the noun-phrase derivation see [function_type], not the argument
-         list. Terminals never carry a '(', so this only affects nonterminals;
+         [function_type(in_type)]) renders by its base head: the noun-phrase
+         derivation sees [function_type], not the argument list, and so does
+         the [names] lookup unless the instantiation has an entry of its own.
+         Terminals never carry a '(', so this only affects nonterminals;
          wrapper instantiations are expanded upstream and never reach here. *)
-      let s = base_symbol_name s in
-      match special_name cfg s with
+      match names_entry cfg s with
       | Some name -> (name, Names_entry)
       | None ->
-          if String.lowercase_ascii s = s then
-            (* Non-terminals: "some_name" -> "a/an some name" *)
-            let parts = String.split_on_char '_' s in
-            let parts = List.filter (fun p -> p <> "") parts in
+          let s = base_symbol_name s in
+          if is_rule_name s then
+            (* Rules: "some_name" or "someName" -> "a/an some name" *)
+            let parts = rule_name_words s in
             if parts = [] then (s, Auto)
             else
               let name = String.concat " " parts in
@@ -148,7 +190,7 @@ let get_readable_name_src cfg terminals s =
 let rec expecting_name_src ?(visited = StringSet.empty) cfg terminals gram s =
   if
     (not (Hashtbl.mem terminals s))
-    && String.lowercase_ascii s = s
+    && is_rule_name s
     && (not (gram.is_terminal s))
     && (not (gram.is_generated s))
     && (not (StringSet.mem s visited))
@@ -191,7 +233,9 @@ let strip_article name =
 (* Pluralise the head (last word) of a readable noun phrase, so a *list*
    subject reads "the value types are complete" rather than the singular. The
    rule is the regular English one (…es after a sibilant, so "catch" ->
-   "catches"); an irregular head noun can be curated in [special_name]. *)
+   "catches"; …ies after a consonant and 'y', so "entry" -> "entries"); an
+   irregular plural is fixed with a [names] entry for the list itself (see
+   [subject_name_src]). *)
 let pluralize_phrase name =
   match List.rev (String.split_on_char ' ' name) with
   | [] | [ "" ] -> name
@@ -204,29 +248,39 @@ let pluralize_phrase name =
       let plural =
         if ends "s" || ends "x" || ends "z" || ends "ch" || ends "sh" then
           last ^ "es"
+        else if
+          ends "y" && n >= 2
+          && not (List.mem last.[n - 2] [ 'a'; 'e'; 'i'; 'o'; 'u' ])
+        then String.sub last 0 (n - 1) ^ "ies"
         else last ^ "s"
       in
       String.concat " " (List.rev (plural :: rest))
 
 (* Rendering for the *Assuming that the X is complete* subject. A user-named
    nonterminal names the completed construct directly ("the block type is
-   complete"). A menhir-generated symbol — always a list wrapper when it reaches
-   [%on_error_reduce], since that is the only reason to annotate one — would
-   otherwise render as its raw internal name ("the list(field type) is
-   complete", jargon); instead chase its element and pluralise it ("the field
-   types are complete"). The [%on_error_reduce] reductions that reach here are
-   frequently *epsilon* (an empty list assumed complete), so this subject is what
-   signals to the reader that an optional list element was elided from the
-   Expecting list rather than being illegal — the hedge whose absence silently
-   dropped tokens. *)
+   complete"). A menhir-generated symbol ([list(field_type)],
+   [option(annotation)]) would otherwise render as its raw internal name ("the
+   list(field type) is complete", jargon); instead it is named by its element:
+   pluralised for a list ("the field types are complete"), as is for an option
+   ("the annotation is complete"). A [names] entry for the generated symbol
+   itself ([list(entry) = entries]) takes precedence, for an irregular plural.
+   The [%on_error_reduce] reductions that reach here are frequently *epsilon*
+   (an empty list assumed complete), so this subject is what signals to the
+   reader that an optional list element was elided from the Expecting list
+   rather than being illegal — the hedge whose absence silently dropped
+   tokens. *)
 let subject_name_src cfg terminals gram s =
   if gram.is_generated s then
-    match chase_list_element gram s with
-    | Some elem ->
-        ( pluralize_phrase
-            (strip_article (expecting_name cfg terminals gram elem)),
-          Plural_subject )
-    | None -> ("a list", Plural_subject)
+    match special_name cfg s with
+    | Some name -> (name, Names_entry)
+    | None -> (
+        let list = is_list_shaped gram s in
+        match chase_list_element gram s with
+        | Some elem ->
+            let name = expecting_name cfg terminals gram elem in
+            if list then (pluralize_phrase (strip_article name), Plural_subject)
+            else (name, Chase)
+        | None -> ((if list then "a list" else "a construct"), Plural_subject))
   else get_readable_name_src cfg terminals s
 
 let renders_as_jargon cfg terminals s =

@@ -41,3 +41,42 @@
  (alias runtest)
  (action
   (diff tune-calibrate.expected tune-calibrate.actual)))
+
+; A grammar with no annotation at all (test/cli's): there is nothing to remove,
+; and every reduced rule is a candidate addition.
+
+(rule
+ (with-stdout-to
+  tune-none.actual
+  (run
+   stele
+   tune
+   advise
+   --menhir
+   %{bin:menhir}
+   --grammar
+   %{dep:../cli/parser.mly})))
+
+(rule
+ (alias runtest)
+ (action
+  (diff tune-none.expected tune-none.actual)))
+
+; --menhir can carry flags, here to tune the canonical automaton.
+
+(rule
+ (with-stdout-to
+  tune-canonical.actual
+  (run
+   stele
+   tune
+   dead
+   --menhir
+   "%{bin:menhir} --canonical"
+   --grammar
+   %{dep:parser.mly})))
+
+(rule
+ (alias runtest)
+ (action
+  (diff tune-canonical.expected tune-canonical.actual)))

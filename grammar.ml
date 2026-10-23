@@ -225,7 +225,11 @@ let load_grammar_exn cmly_file =
 let load_grammar cmly_file =
   try load_grammar_exn cmly_file
   with MenhirSdk.Cmly_read.Error msg ->
-    failwith (Printf.sprintf "%s: %s" cmly_file (String.trim msg))
+    (* menhir's message can span lines; keep the error on one. *)
+    let msg =
+      String.trim msg |> String.map (fun c -> if c = '\n' then ' ' else c)
+    in
+    failwith (Printf.sprintf "%s: %s" cmly_file msg)
 
 (* The opaque continuation symbols a symbol can begin with: terminals and
    user-named nonterminals. A menhir-generated symbol is expanded through its

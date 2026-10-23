@@ -16,6 +16,12 @@ stele: config ./malformed.config:4: unknown section header "[nmes]"
 == duplicate [names] entry
 Parsed 15 entries from ./ops.auto.messages
 stele: config ./duplicate.config:3: [names]: duplicate entry for "expr"
+== empty [names] value
+Parsed 15 entries from ./ops.auto.messages
+stele: config ./empty-name.config:2: [names]: empty value for "expr"
+== rule in a [class]
+Parsed 15 entries from ./ops.auto.messages
+stele: config ./class-rule.config [class an operator]: "expr" is a rule, not a token (a class only groups tokens)
 == missing file
 Parsed 15 entries from ./ops.auto.messages
 stele: missing.config: No such file or directory

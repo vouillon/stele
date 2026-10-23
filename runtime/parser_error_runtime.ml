@@ -48,11 +48,17 @@ module Make (E : ENGINE) = struct
                that only understands [<N>] fails [int_of_string "^N"] and leaves
                the line inline in the message — graceful degradation. *)
             let is_subject = String.length tag > 0 && tag.[0] = '^' in
-            let depth =
-              int_of_string
-                (if is_subject then String.sub tag 1 (String.length tag - 1)
-                 else tag)
+            (* The depth is plain decimal digits: [<+2>] or [<0x2>] is not a
+               marker, and stays in the message. *)
+            let digits =
+              if is_subject then String.sub tag 1 (String.length tag - 1)
+              else tag
             in
+            if
+              digits = ""
+              || not (String.for_all (fun c -> c >= '0' && c <= '9') digits)
+            then raise Exit;
+            let depth = int_of_string digits in
             match E.get (depth - 1) env with
             | Some el ->
                 let pos1, pos2 = E.positions el in

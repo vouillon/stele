@@ -10,12 +10,14 @@ phrasing; removing one does the reverse.
 
 on the list now (3): block expr list(stmt)
 
+also annotated, but ignored by menhir (%inline symbols, run `stele tune dead`): plus
+
 ### ADVISOR: should any single construct join or leave the list?
-Trying 3 removal(s) and 3 addition(s), one at a time. Each is scored only
+Trying 3 removal(s) and 2 addition(s), one at a time. Each is scored only
 by how it changes the generated messages; the scores do not add up, so
 apply one, re-run, and see what opens up next.
 
-  summary: improving=0 relocates-overridden=0 mixed=0 harmful=1 dead/no-op=4 neutral=0 skipped=1
+  summary: improving=0 relocates-overridden=0 mixed=0 harmful=1 dead/no-op=4 neutral=0 skipped=0
   what each group means, and what to do with it:
     improving             some message gets better, none gets worse; consider applying
                           (after naming any jargon it lists)

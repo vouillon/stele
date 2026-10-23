@@ -2,7 +2,8 @@
     carry.
 
     A stele-generated message may embed marker lines of two kinds, both anchored
-    at a 1-based stack cell index [N] resolved against the running parser:
+    at a 1-based stack cell index [N] (decimal digits) resolved against the
+    running parser; a marker starts its line:
     - a {b delimiter hint} [<N>This '(' opens the enclosing construct.] —
       underlines the opening delimiter of the construct at cell [N], spanning
       the full alias the label names (one character for a plain [(], both
@@ -71,6 +72,6 @@ module Make (E : ENGINE) : sig
       Returns the main message (marker lines removed) and the located labels in
       the order the markers appear (subject before delimiter hint, matching the
       generator's emission). A marker whose depth exceeds the live stack, or
-      whose depth field it does not recognise, is left inline in the main
-      message. *)
+      whose depth field it does not recognise (anything but decimal digits,
+      after an optional [^]), is left inline in the main message. *)
 end

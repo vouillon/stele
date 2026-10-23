@@ -33,6 +33,32 @@
 - The runtime helper finds an opening delimiter on an earlier line when it has
   to walk back to it.
 - `stele suggest-classes` writes "entries" instead of "entrie(s)".
+- Ctrl-C during `stele tune` stops the run (exit code 130). It used to kill
+  only the running menhir, count the move as skipped, and carry on.
+- `stele tune --menhir` accepts a command with flags, such as
+  `"menhir --canonical"`.
+- `stele tune` reports an `%on_error_reduce` on an `%inline` symbol, which
+  menhir ignores, as dead; it used to refuse the grammar. It no longer offers
+  menhir's start symbols (`prog'`) as additions, and reads a `%type` with a
+  `<` inside it.
+- `stele tune calibrate` reports verdicts that no longer match the list (a kept
+  rule that is gone or ignored, a removed one that is back) as disagreements,
+  instead of counting them as agreement or stopping with an internal error, and
+  ignores blanks in rule names.
+- `stele tune dead` and `stele tune calibrate` no longer accept `--overrides`,
+  which they never used.
+- camelCase rule names are turned into words ("a type alias" for `typeAlias`)
+  instead of being shown as quoted keywords.
+- A name ending in "ss", "us" or "is" is singular ("an access", "the status
+  is complete"), and a plural of a word ending in a consonant and "y" takes
+  "ies" ("entries").
+- A hedge on an option (`%on_error_reduce option(annotation)`) names it in the
+  singular ("the annotation is complete").
+- A `[names]` entry can name a parameterized rule by its base name, and a
+  generated list as a hedge subject (`list(datum) = data`). An empty `[names]`
+  value is an error, and a rule listed in a `[class]` gets its own error.
+- The runtime helper only reads decimal digits as a marker's depth: `<+1>` or
+  `<0x1>` stays in the message.
 
 ## 0.1.0
 

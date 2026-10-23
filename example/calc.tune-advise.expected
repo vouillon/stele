@@ -11,11 +11,11 @@ phrasing; removing one does the reverse.
 on the list now (1): stmts
 
 ### ADVISOR: should any single construct join or leave the list?
-Trying 1 removal(s) and 4 addition(s), one at a time. Each is scored only
+Trying 1 removal(s) and 3 addition(s), one at a time. Each is scored only
 by how it changes the generated messages; the scores do not add up, so
 apply one, re-run, and see what opens up next.
 
-  summary: improving=1 relocates-overridden=0 mixed=0 harmful=0 dead/no-op=2 neutral=1 skipped=1
+  summary: improving=1 relocates-overridden=0 mixed=0 harmful=0 dead/no-op=2 neutral=1 skipped=0
   what each group means, and what to do with it:
     improving             some message gets better, none gets worse; consider applying
                           (after naming any jargon it lists)

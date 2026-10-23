@@ -116,8 +116,8 @@ let cmly_arg =
 let config_arg =
   let doc =
     "Path to the grammar's $(b,.config) sidecar: readable names, token \
-     classes, and opener-name nets. Optional; absent means no curated names, \
-     no classes, and alias-only delimiter hints."
+     classes, opener-name nets, and extra wrapper rules. Optional; absent \
+     means no curated names and no classes."
   in
   Arg.(value & opt string "" & info [ "config" ] ~docv:"FILE" ~doc)
 
@@ -333,8 +333,9 @@ let grammar_arg =
 let menhir_arg =
   let doc =
     "The $(b,menhir) command to run for each trial (a runtime subprocess: \
-     $(b,--list-errors) and $(b,--cmly)). A clear error is reported if it is \
-     not executable."
+     $(b,--list-errors) and $(b,--cmly)). It may carry flags, separated by \
+     spaces, such as $(b,\"menhir --canonical\") for a grammar built with \
+     $(b,--canonical). A clear error is reported if it does not run."
   in
   Arg.(value & opt string "menhir" & info [ "menhir" ] ~docv:"CMD" ~doc)
 
@@ -366,9 +367,8 @@ let tune_dead_cmd =
   let term =
     let+ grammar = grammar_arg
     and+ config = config_arg
-    and+ overrides = overrides_arg
     and+ menhir = menhir_arg in
-    run_tune Tune_dead ~menhir ~config_file:config ~overrides_file:overrides
+    run_tune Tune_dead ~menhir ~config_file:config ~overrides_file:""
       ~grammar_file:grammar
   in
   Cmd.v (Cmd.info "dead" ~doc ~man) term
@@ -381,13 +381,18 @@ let tune_advise_cmd =
       `P
         "For each single move — removing a current annotation, or adding one \
          for a nonterminal reduced somewhere in the automaton — compute the \
-         stats-vector delta and classify it (harmful / improving / dead / \
-         mixed / neutral): any counter that gets worse makes it harmful, \
-         except that new jargon names (fixed by a config entry) only add a \
-         caveat to a move that otherwise improves the messages. Each improving \
-         move is priced by its $(b,override-rot) cost (the $(b,--overrides) \
-         keys the trial's state re-pick would strand); a move whose whole win \
-         lands on already-overridden states is reported separately as \
+         stats-vector delta and classify it. A move is $(b,harmful) when it \
+         adds a \"Syntax error\" fallback, an unsound claim, an uncovered \
+         token or a missed hint, or loses a delimiter hint. Otherwise it is \
+         $(b,improving) when it removes a fallback, an uncovered token or an \
+         \"Assuming ...\" hedge; new jargon names (fixed by a config entry) \
+         are then only a caveat, but make harmful a move with no such gain. A \
+         move that gains hints or un-stacks deep \"Assuming ...\" messages \
+         while adding hedges is $(b,mixed); one that changes no message is \
+         $(b,dead); anything else is $(b,neutral). Each improving move is \
+         priced by its $(b,override-rot) cost (the $(b,--overrides) keys the \
+         trial's state re-pick would strand); a move whose whole win lands on \
+         already-overridden states is reported separately as \
          $(b,RELOCATES-OVERRIDDEN). The tuner recommends; it never applies, \
          and single-move scores do not compose.";
       `S Manpage.s_options;
@@ -420,11 +425,10 @@ let tune_calibrate_cmd =
   let term =
     let+ grammar = grammar_arg
     and+ config = config_arg
-    and+ overrides = overrides_arg
     and+ menhir = menhir_arg
     and+ verdicts = verdicts_arg in
     run_tune (Tune_calibrate verdicts) ~menhir ~config_file:config
-      ~overrides_file:overrides ~grammar_file:grammar
+      ~overrides_file:"" ~grammar_file:grammar
   in
   Cmd.v (Cmd.info "calibrate" ~doc ~man) term
 
@@ -443,7 +447,7 @@ let tune_cmd =
       `P
         "Trials run WITHOUT the $(b,.overrides) file: an annotation change \
          re-picks the sentence-keyed overrides, so a trial that loaded them \
-         could fail the rot guard. The overrides are still read (via \
+         could fail the rot guard. $(b,tune advise) still reads them (via \
          $(b,--overrides)) to price each improving move's override-rot cost.";
       `S Manpage.s_commands;
     ]

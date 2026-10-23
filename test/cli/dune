@@ -143,6 +143,28 @@
      --config
      %{dep:duplicate.config}
      %{dep:ops.auto.messages}))
+   (echo "== empty [names] value\n")
+   (with-accepted-exit-codes
+    1
+    (run
+     stele
+     stats
+     --cmly
+     %{dep:ops.cmly}
+     --config
+     %{dep:empty-name.config}
+     %{dep:ops.auto.messages}))
+   (echo "== rule in a [class]\n")
+   (with-accepted-exit-codes
+    1
+    (run
+     stele
+     stats
+     --cmly
+     %{dep:ops.cmly}
+     --config
+     %{dep:class-rule.config}
+     %{dep:ops.auto.messages}))
    (echo "== missing file\n")
    (with-accepted-exit-codes
     1

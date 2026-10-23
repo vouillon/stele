@@ -102,7 +102,7 @@ let parse_lr1_item line =
     in
     let rhs_part = String.sub remainder 0 bracket_idx |> String.trim in
     let closing_bracket_idx =
-      try String.index remainder ']'
+      try String.index_from remainder bracket_idx ']'
       with Not_found ->
         failwith ("Missing closing lookahead bracket in: " ^ content)
     in

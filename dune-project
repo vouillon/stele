@@ -15,7 +15,8 @@
   (depends
     (ocaml (>= 4.14))
     ; 20260122 for --no-code-generation and for the Cmly_api [Surface] module
-    ; main.ml reads (token aliases, the pre-inlining surface grammar).
+    ; stele reads (token aliases, the pre-inlining surface grammar, the
+    ; %on_error_reduce list).
     (menhir (and :build (>= 20260122)))
     (menhirSdk (>= 20260122))
     (menhirLib (>= 20260122))

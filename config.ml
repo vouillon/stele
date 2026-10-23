@@ -94,6 +94,8 @@ let load_config file =
                 in
                 if Hashtbl.mem names key then
                   fail "[names]: duplicate entry for %S" key;
+                if key = "" then fail "[names]: no name before '=' in %S" line;
+                if value = "" then fail "[names]: empty value for %S" key;
                 Hashtbl.replace names key value)
         | `Class -> (
             match !classes with
@@ -148,16 +150,34 @@ let check_config_rot ~file gram cfg =
           remove or fix it)"
          file section entry)
   in
-  Hashtbl.iter
-    (fun key _ ->
-      if not (gram.is_terminal key || gram.is_nonterminal key) then
-        stale "names" key)
-    cfg.names;
+  (* The base name of a parameterized rule ([function_type] for
+     [function_type(in_type)]) is a valid [names] key: it names every
+     instantiation. *)
+  let is_parameterized_base head =
+    StringSet.exists
+      (fun n -> String.contains n '(' && base_symbol_name n = head)
+      gram.all_nonterminals
+  in
+  (* Sorted, so the entry reported first does not depend on hashing. *)
+  Hashtbl.fold (fun key _ acc -> key :: acc) cfg.names []
+  |> List.sort compare
+  |> List.iter (fun key ->
+      if
+        not
+          (gram.is_terminal key || gram.is_nonterminal key
+         || is_parameterized_base key)
+      then stale "names" key);
   List.iter
     (fun (label, members) ->
       StringSet.iter
         (fun m ->
-          if not (gram.is_terminal m) then
+          if gram.is_nonterminal m then
+            failwith
+              (Printf.sprintf
+                 "config %s [class %s]: %S is a rule, not a token (a class \
+                  only groups tokens)"
+                 file label m)
+          else if not (gram.is_terminal m) then
             stale (Printf.sprintf "class %s" label) m)
         members)
     cfg.classes;

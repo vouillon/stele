@@ -1,8 +1,10 @@
 (* A grammar whose %on_error_reduce declarations a line-based reader would get
    wrong: they are indented, split over several declarations and lines, carry
    comments and a parameterized symbol, and the text "%on_error_reduce" also
-   appears in places that are not declarations. `stele tune` must find exactly
-   the annotations menhir reports, and edit them in place. *)
+   appears in places that are not declarations, including after a type with a
+   '<' inside it. One annotation is on an %inline symbol, which menhir ignores.
+   `stele tune` must find exactly the annotations menhir reports, report the
+   ignored one as dead, and edit them in place. *)
 
 %{
   (* Not a declaration: %on_error_reduce stmt *)
@@ -19,7 +21,7 @@
 %start <unit> main
 
 /* Not a declaration either: %on_error_reduce expr */
-%type <unit -> unit> unused_type_holder
+%type <[< `A | `B ] -> unit> unused_type_holder
 
 %left PLUS
 
@@ -28,6 +30,7 @@
   (* a comment inside the declaration *)
   list(stmt)
   block
+%on_error_reduce plus
 
 %%
 
@@ -43,7 +46,10 @@ block:
 
 expr:
   | INT {}
-  | expr PLUS expr {}
+  | expr plus expr {}
+
+%inline plus:
+  | PLUS {}
 
 unused_type_holder:
-  | INT { fun () -> () }
+  | INT { fun _ -> () }

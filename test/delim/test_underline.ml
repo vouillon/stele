@@ -113,4 +113,15 @@ let () =
       failwith
         (Printf.sprintf "marker past the stack: got %S with %d label(s)" main
            (List.length ls)));
+  (* Only decimal digits make a depth: [<+1>] and [<0x1>] are prose. *)
+  List.iter
+    (fun m ->
+      match R.resolve ~source:"[ 1" ~env:[| cell 0 1 |] m with
+      | main, [] when main = m ->
+          Printf.printf "%S: not a marker, left inline — ok\n" m
+      | main, ls ->
+          failwith
+            (Printf.sprintf "%S: got %S with %d label(s)" m main
+               (List.length ls)))
+    [ "<+1>This '[' opens it."; "<0x1>This '[' opens it."; "<^+1>this" ];
   print_string "all underline checks passed\n"

@@ -381,7 +381,8 @@ The `test/delim/` grammar exercises this.
 **Stale entries fail the build.** The config is checked every time it is read.
 A `[class]` member that is not a token, a `[names]` key that is not a symbol, an
 `[opener-nets]` pattern that matches nothing, or a `[wrappers]` name that is no
-helper rule is an error naming the file, section, and entry. So a config left
+helper rule is an error naming the file, section, and entry. So are a duplicate
+or empty `[names]` entry. So a config left
 behind by a grammar change breaks the build instead of silently doing nothing.
 
 ## Naming
@@ -389,15 +390,21 @@ behind by a grammar change breaks the build instead of silently doing nothing.
 This is how a symbol is turned into words, in order of precedence:
 
 1. A token with an alias is shown as the quoted alias: `')'`, `'(export'`.
-2. A symbol with a `[names]` entry is shown as that phrase.
+2. A symbol with a `[names]` entry is shown as that phrase. A parameterized rule
+   can be named by its base name (`function_type`), which covers every use, or
+   per use (`function_type(TYPE)`). In a hedge, a generated list can be named
+   too (`list(datum) = data`), for an irregular plural.
 3. In an Expecting list, a list rule is named by its element, so the message
    says "a parameter" rather than "a parameter list". This only happens when
    every non-empty form of the list starts with the same symbol; otherwise the
    list keeps its own name.
-4. A lowercase rule name is turned into words: underscores become spaces and an
-   article is added (`condition_expression` reads "a condition expression"). A
-   plural name gets no article and agrees with "Assuming that the X are
-   complete".
+4. A rule name is turned into words: underscores and camelCase humps become
+   spaces and an article is added (`condition_expression` and
+   `conditionExpression` both read "a condition expression"). A plural name
+   gets no article and agrees with "Assuming that the X are complete". A name is
+   plural when its last word ends in `s`, but not in `ss`, `us` or `is`
+   ("an access", "a status"); a `[names]` entry fixes a word the rule gets
+   wrong.
 5. Tokens in a `[class LABEL]` are shown together as the label.
 6. Any other all-caps token is shown as its name in lowercase and quotes. That
    is right for keywords (`'func'`, `'mut'`) but wrong for value tokens: an
@@ -552,8 +559,8 @@ operator."
   only for the rules you split.
 - **Run menhir with `--canonical`**, which merges no state at all. Use it on
   every menhir command (`--list-errors`, `--cmly`, `--compile-errors`, and the
-  parser build itself); the `state/automaton item-set match` line in `stats`
-  catches a mismatch. This needs no grammar change, but it splits every state
+  parser build itself, and `stele tune --menhir "menhir --canonical"`); the
+  `state/automaton item-set match` line in `stats` catches a mismatch. This needs no grammar change, but it splits every state
   in the grammar, not just the ones whose messages suffer, so on a large
   grammar the parser can grow a lot.
 
@@ -600,7 +607,8 @@ handler.
 A message can point at a place in the source: the opening delimiter, or the
 span of a finished construct. But the message is written at build time, before
 any input exists, so it leaves a marker for the run time to resolve. There are
-two kinds, each holding a 1-based position `N` on the parser's stack:
+two kinds, each at the start of a line and holding a 1-based position `N` (in
+decimal digits) on the parser's stack:
 
 - a **delimiter hint**, `<N>This '(' opens …`;
 - a **hedge subject**, `<^N>this expression`.
@@ -653,16 +661,19 @@ grown.
 Each trial copies the grammar to a scratch directory, adds or removes one
 annotation, re-runs menhir, regenerates the messages, and compares the quality
 counters. The scratch directory is removed afterwards, even on failure or
-Ctrl-C.
+Ctrl-C, which stops the run with exit code 130.
 
 The annotations can be laid out any way menhir accepts: one declaration or
 several, spread over lines, with comments. The tuner edits them in place, so
 each keeps its own declaration, and a grammar with none yet can still be
-advised on what to add. The timing goes to stderr, so the report on stdout can
+advised on what to add. Menhir ignores an annotation on an `%inline` symbol,
+with a warning; the tuner reports it as dead. The timing goes to stderr, so the report on stdout can
 be pinned like any other output.
 
 There are three subcommands. All take `--grammar FILE.mly`, `--config`, and
-`--menhir CMD` (default `menhir`):
+`--menhir CMD` (default `menhir`). `CMD` may carry flags separated by spaces,
+such as `--menhir "menhir --canonical"` for a grammar built with
+`--canonical`:
 
 ```
 stele tune dead      --grammar g.mly [--config g.config]
@@ -686,13 +697,17 @@ stele tune calibrate --grammar g.mly [--config g.config] --verdicts g.verdicts
     wrote an override for. Apply it only if the generated message would beat
     yours. For every improving change, the report also says how many of your
     overrides it would force you to re-key.
-  - `MIXED`: the change gains a delimiter hint in one place but turns another
-    message into a hedge. Compare the wording.
+  - `MIXED`: the change gains a delimiter hint, or shortens a deep chain of
+    "Assuming …" messages, but turns other messages into hedges. Compare the
+    wording.
 - **`calibrate`** replays a log of past decisions (`--verdicts`) and checks that
   the tuner agrees with them: removing a `keep` annotation or re-adding a
   `removed` one should not improve anything. It reports how often it agrees and
-  lists the disagreements. The file has one `keep RULE` or `removed RULE` per
-  line; `#` comments and blank lines are ignored. Keep it beside the grammar.
+  lists the disagreements, including verdicts that no longer match the list: a
+  kept rule that is gone or ignored by menhir, or a removed one that is back.
+  The file has one `keep RULE` or `removed RULE` per line, with blanks in `RULE`
+  ignored as menhir ignores them; `#` comments and blank lines are ignored.
+  Keep it beside the grammar.
 
 **Why trials ignore overrides.** Changing an annotation can renumber states and
 change which sample sentence menhir picks for them, which would break
@@ -765,6 +780,7 @@ stele/
     dune
   test/                      ; stele's own regression tests
     delim/                   ; the delimiter-pairing grammar + runtime unit checks
+    naming/                  ; how rule names become words
     cli/                     ; review commands and error messages, on a grammar
                              ; with more operators than the cap
     tune/                    ; the tuner, on awkwardly laid-out annotations

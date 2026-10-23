@@ -103,11 +103,6 @@ let tune_rm_rf dir =
   if Sys.file_exists dir then
     ignore (Sys.command (Printf.sprintf "rm -rf %s" (Filename.quote dir)))
 
-(* Run [f] with a fresh scratch dir, guaranteed removed afterwards. [Fun.protect]
-   covers a normal return or an exception (a bad grammar, a rot failure); the
-   [at_exit] hook covers an uncaught exception that skips the [finally]; and the
-   SIGINT handler turns Ctrl-C into a normal [exit], which runs [at_exit]. So the
-   source tree is byte-identical after any run. *)
 (* A fresh uniquely-named scratch directory. [Filename.temp_dir] would do this
    but is OCaml 5.1+, and stele supports 4.14; so create a unique temp *file*
    (atomic), drop it, and mkdir in its place. The tiny race window is harmless
@@ -118,6 +113,11 @@ let tune_temp_dir () =
   Unix.mkdir base 0o700;
   base
 
+(* Run [f] with a fresh scratch dir, guaranteed removed afterwards. [Fun.protect]
+   covers a normal return or an exception (a bad grammar, a rot failure); the
+   [at_exit] hook covers an uncaught exception that skips the [finally]; and the
+   SIGINT handler turns Ctrl-C into a normal [exit], which runs [at_exit]. So the
+   source tree is byte-identical after any run. *)
 let tune_with_scratch f =
   let dir = tune_temp_dir () in
   at_exit (fun () -> tune_rm_rf dir);
@@ -128,24 +128,68 @@ let tune_with_scratch f =
       tune_rm_rf dir)
     (fun () -> f dir)
 
+(* Run the menhir command ([--menhir], split on blanks so that it can carry
+   flags such as [--canonical]) with [args] appended, its stdout and stderr sent
+   to the files [out] and [err] (which may be the same file), and return whether
+   it succeeded. It is run directly rather than through [Sys.command], whose
+   [system()] ignores SIGINT in stele while menhir runs: a Ctrl-C would kill only
+   menhir, and the trial would read as a grammar menhir rejected. Here the
+   SIGINT reaches stele as well (see [tune_with_scratch]), and a menhir killed
+   by any signal stops the run. *)
+let tune_run_menhir menhir args ~out ~err =
+  match String.split_on_char ' ' menhir |> List.filter (fun s -> s <> "") with
+  | [] -> failwith "--menhir: empty command"
+  | prog :: flags -> (
+      let open_out f =
+        Unix.openfile f [ Unix.O_WRONLY; Unix.O_CREAT; Unix.O_TRUNC ] 0o644
+      in
+      let fd_in = Unix.openfile "/dev/null" [ Unix.O_RDONLY ] 0 in
+      let fd_out = open_out out in
+      let fd_err = if err = out then fd_out else open_out err in
+      let pid =
+        Fun.protect
+          ~finally:(fun () ->
+            Unix.close fd_in;
+            Unix.close fd_out;
+            if fd_err != fd_out then Unix.close fd_err)
+          (fun () ->
+            try
+              Unix.create_process prog
+                (Array.of_list ((prog :: flags) @ args))
+                fd_in fd_out fd_err
+            with Unix.Unix_error (e, _, _) ->
+              failwith
+                (Printf.sprintf "cannot run menhir command %S: %s" menhir
+                   (Unix.error_message e)))
+      in
+      let rec wait () =
+        try snd (Unix.waitpid [] pid)
+        with Unix.Unix_error (Unix.EINTR, _, _) -> wait ()
+      in
+      match wait () with
+      | Unix.WEXITED 0 -> true
+      | Unix.WEXITED _ -> false
+      | Unix.WSIGNALED s | Unix.WSTOPPED s ->
+          if s = Sys.sigint then exit 130
+          else failwith (Printf.sprintf "menhir command %S was killed" menhir))
+
 (* Verify the menhir command actually runs; a clear failure otherwise (caught at
    the top level and printed as a one-line [stele:] error). *)
 let tune_check_menhir menhir =
-  let cmd =
-    Printf.sprintf "%s --version >/dev/null 2>&1" (Filename.quote menhir)
-  in
-  if Sys.command cmd <> 0 then
+  if
+    not
+      (tune_run_menhir menhir [ "--version" ] ~out:"/dev/null" ~err:"/dev/null")
+  then
     failwith
       (Printf.sprintf
-         "menhir command %S is not executable (pass --menhir, or run under the \
-          opam switch that provides menhir)"
+         "menhir command %S does not run (pass --menhir, or run under the opam \
+          switch that provides menhir)"
          menhir)
 
 (* What the tuner reads off a [.cmly]: the grammar's current [%on_error_reduce]
    annotations, in the order menhir lists them and without duplicates, and the
-   nonterminals reduced somewhere in the automaton (the LHS of every [reduce
-   production ...] line [menhir --dump] prints), from which the candidate
-   additions are drawn. *)
+   nonterminals reduced somewhere in the automaton, other than the start
+   symbols menhir adds, from which the candidate additions are drawn. *)
 let tune_read_cmly cmly_file =
   let module G = MenhirSdk.Cmly_read.Read (struct
     let filename = cmly_file
@@ -157,8 +201,13 @@ let tune_read_cmly cmly_file =
       [] Surface.on_error_reduce
     |> List.rev
   in
+  (* A start symbol ([prog'], added by menhir) cannot be annotated. *)
   let s = ref StringSet.empty in
-  let add p = s := StringSet.add (Nonterminal.name (Production.lhs p)) !s in
+  let add p =
+    let nt = Production.lhs p in
+    if Nonterminal.kind nt = `REGULAR then
+      s := StringSet.add (Nonterminal.name nt) !s
+  in
   Lr1.iter (fun st ->
       (match Lr1.default_reduction st with Some p -> add p | None -> ());
       List.iter (fun (_, p) -> add p) (Lr1.get_reductions st));
@@ -210,15 +259,15 @@ let tune_scan_annotations src =
       | '"' -> i + 1
       | _ -> skip_string (i + 1)
   in
-  (* [depth] counts the open '<'; the '>' of an arrow [->] closes nothing. *)
-  let rec skip_type i depth =
+  (* As in menhir's lexer, a type ends at the first '>' that is not part of an
+     arrow [->]; a '<' inside it opens nothing ([[< `A | `B ] -> unit]). *)
+  let rec skip_type i =
     if i >= n then n
     else
       match src.[i] with
-      | '<' -> skip_type (i + 1) (depth + 1)
-      | '>' when src.[i - 1] = '-' -> skip_type (i + 1) depth
-      | '>' -> if depth = 1 then i + 1 else skip_type (i + 1) (depth - 1)
-      | _ -> skip_type (i + 1) depth
+      | '>' when src.[i - 1] = '-' -> skip_type (i + 1)
+      | '>' -> i + 1
+      | _ -> skip_type (i + 1)
   in
   let is_blank c = c = ' ' || c = '\t' || c = '\n' || c = '\r' in
   let rec skip_trivia i =
@@ -283,7 +332,7 @@ let tune_scan_annotations src =
               ({ od_start = i; od_stop = stop; od_symbols = syms } :: decls)
           else loop j decls
       | '"' -> loop (skip_string (i + 1)) decls
-      | '<' -> loop (skip_type (i + 1) 1) decls
+      | '<' -> loop (skip_type (i + 1)) decls
       | _ -> loop (i + 1) decls
   in
   loop 0 []
@@ -332,23 +381,18 @@ let tune_edit_annotations src (decls, sep) op =
    output is left in [outprefix.err]. [mly] is the grammar file; [outprefix]
    names the scratch artifacts. *)
 let tune_run_trial ~menhir ~cfg ~mly ~outprefix : tune_trial option =
-  let q = Filename.quote in
   let messages = outprefix ^ ".messages"
   and cmly = outprefix ^ ".cmly"
   and err = outprefix ^ ".err" in
   (* Trials share their scratch prefix: clear the previous trial's artifacts so
      that a failed step can never pick up stale ones. *)
   List.iter (fun f -> if Sys.file_exists f then Sys.remove f) [ messages; cmly ];
-  let succeeds cmd = Sys.command cmd = 0 in
   if
     not
-      (succeeds
-         (Printf.sprintf "%s %s --list-errors > %s 2> %s" (q menhir) (q mly)
-            (q messages) (q err))
-      && succeeds
-           (Printf.sprintf
-              "%s %s --cmly --no-code-generation --base %s > %s 2>&1" (q menhir)
-              (q mly) (q outprefix) (q err)))
+      (tune_run_menhir menhir [ mly; "--list-errors" ] ~out:messages ~err
+      && tune_run_menhir menhir
+           [ mly; "--cmly"; "--no-code-generation"; "--base"; outprefix ]
+           ~out:err ~err)
   then None
   else
     let entries = Parse_messages.parse_file messages in
@@ -694,6 +738,8 @@ type tune_setup = {
   ts_decls : oer_decl list * int;
       (** the source's [%on_error_reduce] declarations and its [%%] offset *)
   ts_annots : string list;  (** the current annotations *)
+  ts_ignored : string list;
+      (** annotations in the source that menhir ignores (on %inline symbols) *)
   ts_reducible : StringSet.t;  (** the nonterminals the baseline reduces *)
   ts_mly : string;  (** the scratch grammar copy, mutated per trial *)
   ts_cfg : config;
@@ -729,21 +775,25 @@ let tune_setup ~menhir ~config_file ~overrides_file ~grammar_file ~scratch =
     check_config_rot ~file:config_file gram cfg
   end;
   let annots, reducible = tune_read_cmly base_cmly in
-  (* The edits are only sound if the scan found exactly the annotations menhir
+  (* The edits are only sound if the scan found every annotation menhir
      reports; anything else (a layout the scanner does not understand) is a
-     clean error rather than a silently wrong trial. *)
+     clean error rather than a silently wrong trial. The scan may find more:
+     menhir accepts, but ignores with a warning, an annotation on an %inline
+     symbol, and leaves it out of its list. Those are reported as dead. *)
   let scanned =
     List.concat_map
       (fun d -> List.map (fun (s, _, _) -> s) d.od_symbols)
       (fst decls)
+    |> List.sort_uniq compare
   in
-  if List.sort_uniq compare scanned <> List.sort_uniq compare annots then
+  if not (List.for_all (fun a -> List.mem a scanned) annots) then
     failwith
       (Printf.sprintf
          "could not locate the %%on_error_reduce declarations of %s (menhir \
           reports [%s], the source scan found [%s])"
          grammar_file (String.concat " " annots)
          (String.concat " " scanned));
+  let ignored = List.filter (fun s -> not (List.mem s annots)) scanned in
   let override_keys =
     if overrides_file = "" then []
     else
@@ -756,6 +806,7 @@ let tune_setup ~menhir ~config_file ~overrides_file ~grammar_file ~scratch =
     ts_src = src;
     ts_decls = decls;
     ts_annots = annots;
+    ts_ignored = ignored;
     ts_reducible = reducible;
     ts_mly = mly;
     ts_cfg = cfg;
@@ -779,24 +830,26 @@ let tune_move ts op nt =
     tune_run_trial ~menhir:ts.ts_menhir ~cfg:ts.ts_cfg ~mly:ts.ts_mly ~outprefix
   in
   (* Confirm the edit did what it meant to, as menhir sees it, so that a trial
-     is never scored on the wrong grammar. *)
-  (if trial <> None then
-     let actual, _ = tune_read_cmly (outprefix ^ ".cmly") in
-     if List.sort compare actual <> List.sort compare expected then
-       failwith
-         (Printf.sprintf
-            "internal error: editing the annotations for \"%s %s\" gave [%s] \
-             instead of [%s]"
-            (match op with `Remove -> "remove" | `Add -> "add")
-            nt (String.concat " " actual)
-            (String.concat " " expected)));
-  trial
+     is never scored on the wrong grammar. An added annotation menhir ignores
+     (on an %inline symbol) is a move menhir does not accept: no trial. *)
+  match trial with
+  | None -> None
+  | Some _ ->
+      let actual, _ = tune_read_cmly (outprefix ^ ".cmly") in
+      let sorted l = List.sort compare l in
+      if sorted actual = sorted expected then trial
+      else if op = `Add && sorted actual = sorted ts.ts_annots then None
+      else
+        failwith
+          (Printf.sprintf
+             "internal error: editing the annotations for \"%s %s\" gave [%s] \
+              instead of [%s]"
+             (match op with `Remove -> "remove" | `Add -> "add")
+             nt (String.concat " " actual)
+             (String.concat " " expected))
 
 (* --- the three report parts --- *)
 
-(* Plain phrasing shared by the improving-collateral and relocates sections:
-   the N hand-written messages (from the [.overrides] file) whose key sentences
-   the trial's state merge/renumber changes. *)
 (* The names a move would newly show as jargon, sorted. They are fixed in the
    config or the grammar's naming, not in the annotations, so the report lists
    them as a caveat on an improving move instead of rejecting it. *)
@@ -811,6 +864,9 @@ let tune_print_jargon_caveat = function
         \    name first (a [names] entry, a token alias, or a rule rename):\n";
       List.iter (fun n -> Printf.printf "      %s\n" n) names
 
+(* Plain phrasing shared by the improving-collateral and relocates sections:
+   the N hand-written messages (from the [.overrides] file) whose key sentences
+   the trial's state merge/renumber changes. *)
 let tune_rekey_phrase rc =
   if rc = 1 then "1 hand-written override"
   else Printf.sprintf "%d hand-written overrides" rc
@@ -819,6 +875,14 @@ let tune_dead_sweep ts =
   Printf.printf
     "### DEAD SWEEP: which constructs on the list are not doing anything?\n\
      Removing one that changes no message at all means it can be dropped.\n\n";
+  List.iter
+    (fun nt ->
+      Printf.printf
+        "  ---- remove %s\n\
+        \    DEAD: menhir ignores it (an %%inline symbol is never reduced); \
+         safe to delete\n"
+        nt)
+    ts.ts_ignored;
   let dead =
     List.fold_left
       (fun n nt ->
@@ -837,7 +901,8 @@ let tune_dead_sweep ts =
               n + 1
             end
             else n)
-      0 ts.ts_annots
+      (List.length ts.ts_ignored)
+      ts.ts_annots
   in
   Printf.printf "  dead constructs found: %d\n\n" dead
 
@@ -963,9 +1028,10 @@ let tune_advisor ts candidates =
   end;
   if mixed <> [] then begin
     Printf.printf
-      "  MIXED: each of these helps one way and hurts another. It gains a\n\
-      \  message that points at the unclosed opener, but also turns another\n\
-      \  message into an \"Assuming ... is complete\" hedge. Judge case by case:\n";
+      "  MIXED: each of these helps one way and hurts another. It gains\n\
+      \  messages that point at the unclosed opener, or un-stacks deep\n\
+      \  \"Assuming ...\" messages, but also turns other messages into\n\
+      \  \"Assuming ... is complete\" hedges. Judge case by case:\n";
     List.iter
       (fun (label, reason) -> Printf.printf "  ---- %s\n    %s\n" label reason)
       mixed;
@@ -992,7 +1058,13 @@ let tune_parse_verdicts file =
            | None -> fail "malformed line %S" line
            | Some i -> (
                let verb = String.sub t 0 i in
-               let nt = String.trim (String.sub t i (String.length t - i)) in
+               (* Spelled as menhir does, without blanks: [list(item)]. *)
+               let nt =
+                 String.sub t i (String.length t - i)
+                 |> String.to_seq
+                 |> Seq.filter (fun c -> not (List.mem c [ ' '; '\t' ]))
+                 |> String.of_seq
+               in
                if nt = "" then fail "malformed line %S" line;
                match verb with
                | "keep" -> (nt :: kept, removed)
@@ -1011,41 +1083,54 @@ let tune_calibrate ts ~kept ~removed =
     \  (removing a kept construct, or re-adding a removed one, must score \
      non-improving)\n";
   let agree = ref 0 and total = ref 0 and disagree = ref [] in
+  let disagreement fmt =
+    Printf.ksprintf
+      (fun d ->
+        incr total;
+        disagree := d :: !disagree)
+      fmt
+  in
   let is_improving = function TImproving _ -> true | _ -> false in
+  (* A verdict that no longer matches the list is a disagreement too: the log
+     names a rule that was renamed, or an annotation that came back or went
+     away since. Checked first, so a stale name never scores as a no-op. *)
   List.iter
     (fun nt ->
-      match tune_move ts `Remove nt with
-      (* A kept annotation menhir won't let us remove is inert: skip it (not even
-         counted in [total]). This is asymmetric with the removed branch below,
-         where a name menhir won't re-accept is a real disagreement — it means
-         the logged nonterminal is stale or renamed. *)
-      | None -> ()
-      | Some trial ->
-          incr total;
-          if is_improving (tune_classify ~base:ts.ts_base ~trial) then
-            disagree :=
-              Printf.sprintf
+      if List.mem nt ts.ts_ignored then
+        disagreement "kept %s, but menhir ignores it (an %%inline symbol)" nt
+      else if not (List.mem nt ts.ts_annots) then
+        disagreement "kept %s, but it is not on the list (stale name?)" nt
+      else
+        match tune_move ts `Remove nt with
+        (* A kept annotation menhir won't let us remove is inert: skip it (not
+           even counted in [total]). *)
+        | None -> ()
+        | Some trial ->
+            if is_improving (tune_classify ~base:ts.ts_base ~trial) then
+              disagreement
                 "kept %s, but removing it now scores as an improvement" nt
-              :: !disagree
-          else incr agree)
+            else (
+              incr total;
+              incr agree))
     kept;
   List.iter
     (fun nt ->
-      match tune_move ts `Add nt with
-      | None ->
-          incr total;
-          disagree :=
-            Printf.sprintf
-              "removed %s, but menhir now rejects re-adding it (stale name?)" nt
-            :: !disagree
-      | Some trial ->
-          incr total;
-          if is_improving (tune_classify ~base:ts.ts_base ~trial) then
-            disagree :=
-              Printf.sprintf
+      if List.mem nt ts.ts_annots then
+        disagreement "removed %s, but it is on the list" nt
+      else
+        match tune_move ts `Add nt with
+        | None ->
+            disagreement
+              "removed %s, but menhir does not accept adding it back (stale \
+               name, or an %%inline symbol?)"
+              nt
+        | Some trial ->
+            if is_improving (tune_classify ~base:ts.ts_base ~trial) then
+              disagreement
                 "removed %s, but re-adding it now scores as an improvement" nt
-              :: !disagree
-          else incr agree)
+            else (
+              incr total;
+              incr agree))
     removed;
   Printf.printf "  agreement: %d / %d\n" !agree !total;
   if !disagree <> [] then begin
@@ -1075,6 +1160,11 @@ let run_tune mode ~menhir ~config_file ~overrides_file ~grammar_file =
          phrasing; removing one does the reverse.\n\n";
       Printf.printf "on the list now (%d): %s\n\n" (List.length ts.ts_annots)
         (if ts.ts_annots = [] then "(none)" else String.concat " " ts.ts_annots);
+      if ts.ts_ignored <> [] then
+        Printf.printf
+          "also annotated, but ignored by menhir (%%inline symbols, run `stele \
+           tune dead`): %s\n\n"
+          (String.concat " " ts.ts_ignored);
       (match mode with
       | Tune_dead -> tune_dead_sweep ts
       | Tune_advise ->
