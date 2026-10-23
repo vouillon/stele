@@ -382,12 +382,14 @@ let tune_advise_cmd =
         "For each single move — removing a current annotation, or adding one \
          for a nonterminal reduced somewhere in the automaton — compute the \
          stats-vector delta and classify it (harmful / improving / dead / \
-         mixed / neutral): any counter that gets worse makes it harmful. Each \
-         improving move is priced by its $(b,override-rot) cost (the \
-         $(b,--overrides) keys the trial's state re-pick would strand); a move \
-         whose whole win lands on already-overridden states is reported \
-         separately as $(b,RELOCATES-OVERRIDDEN). The tuner recommends; it \
-         never applies, and single-move scores do not compose.";
+         mixed / neutral): any counter that gets worse makes it harmful, \
+         except that new jargon names (fixed by a config entry) only add a \
+         caveat to a move that otherwise improves the messages. Each improving \
+         move is priced by its $(b,override-rot) cost (the $(b,--overrides) \
+         keys the trial's state re-pick would strand); a move whose whole win \
+         lands on already-overridden states is reported separately as \
+         $(b,RELOCATES-OVERRIDDEN). The tuner recommends; it never applies, \
+         and single-move scores do not compose.";
       `S Manpage.s_options;
     ]
   in

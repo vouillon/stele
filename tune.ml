@@ -88,6 +88,8 @@ type tune_trial = {
   tt_headers : StringSet.t;
   tt_actual : string list;
   tt_census : (string * int) list;
+  tt_jargon : StringSet.t;
+      (** every name shown as jargon, token or rule, as "NAME (rendering)" *)
 }
 
 (* --- scratch + subprocess plumbing --- *)
@@ -366,12 +368,13 @@ let tune_run_trial ~menhir ~cfg ~mly ~outprefix : tune_trial option =
     let missed =
       List.fold_left (fun a s -> a + List.length s.missed_hints) 0 stats
     in
-    let jargon =
+    let token_jargon =
       List.fold_left
         (fun a s -> StringSet.union a s.jargon)
         StringSet.empty stats
-      |> StringSet.cardinal
     in
+    let jargon = StringSet.cardinal token_jargon in
+    let nt_jargon = nonterminal_jargon stats in
     let oracle =
       List.map
         (fun (e, (_, _, s)) -> check_entry ctx.grammar ctx.auto (e, s))
@@ -396,7 +399,7 @@ let tune_run_trial ~menhir ~cfg ~mly ~outprefix : tune_trial option =
         tv_hints = count (fun s -> s.hinted);
         tv_missed = missed;
         tv_jargon = jargon;
-        tv_nt_jargon = StringSet.cardinal (nonterminal_jargon stats);
+        tv_nt_jargon = StringSet.cardinal nt_jargon;
         tv_unsound = unsound;
         tv_uncov_e = uncov_e;
         tv_uncov_t = uncov_t;
@@ -414,6 +417,13 @@ let tune_run_trial ~menhir ~cfg ~mly ~outprefix : tune_trial option =
           |> List.sort String.compare;
         tt_census =
           census_counts (List.map (fun (_, (_, body, _)) -> body) results);
+        tt_jargon =
+          StringSet.fold
+            (fun t acc ->
+              StringSet.add
+                (Printf.sprintf "%s ('%s')" t (String.lowercase_ascii t))
+                acc)
+            token_jargon nt_jargon;
       }
 
 (* A move's verdict; the string is the short reason shown in the report. *)
@@ -439,17 +449,16 @@ let tune_classify ~base ~trial =
   and d_cascade = t.tv_cascade - b.tv_cascade in
   (* Regression dominates: any single regressed counter classifies the move
      THarmful, tested before any improving signal, so a move that both regresses
-     and improves is still reported HARMFUL. Only a move with zero regressions
-     reaches the improving / dead / mixed / neutral analysis in the [else]. *)
+     and improves is still reported HARMFUL. The exception is jargon: a name
+     shown as jargon is fixed by a [names] entry, a token alias or a rule
+     rename, without touching the annotations. So new jargon does not stop a
+     move from being IMPROVING (the report lists the names as a caveat, see
+     [tune_new_jargon]); it only makes HARMFUL a move with nothing to gain. *)
   if d_over5 > 0 then THarmful (Printf.sprintf "+%d over-5 fallback(s)" d_over5)
   else if d_empty > 0 then
     THarmful (Printf.sprintf "+%d empty-list fallback(s)" d_empty)
   else if d_hints < 0 then
     THarmful (Printf.sprintf "%d delimiter hint(s)" d_hints)
-  else if d_jargon > 0 then
-    THarmful (Printf.sprintf "+%d jargon token(s)" d_jargon)
-  else if d_nt_jargon > 0 then
-    THarmful (Printf.sprintf "+%d jargon nonterminal(s)" d_nt_jargon)
   else if d_unsound > 0 then
     THarmful (Printf.sprintf "+%d unsound claim(s)" d_unsound)
   else if d_missed > 0 then
@@ -468,6 +477,10 @@ let tune_classify ~base ~trial =
     if d_over5 < 0 then
       Buffer.add_string why (Printf.sprintf " over5%d" d_over5);
     if Buffer.length why > 0 then TImproving (String.trim (Buffer.contents why))
+    else if d_jargon > 0 || d_nt_jargon > 0 then
+      THarmful
+        (Printf.sprintf "+%d jargon token(s), +%d jargon nonterminal(s)"
+           d_jargon d_nt_jargon)
     else if
       base.tt_vec = trial.tt_vec
       && base.tt_actual = trial.tt_actual
@@ -784,6 +797,20 @@ let tune_move ts op nt =
 (* Plain phrasing shared by the improving-collateral and relocates sections:
    the N hand-written messages (from the [.overrides] file) whose key sentences
    the trial's state merge/renumber changes. *)
+(* The names a move would newly show as jargon, sorted. They are fixed in the
+   config or the grammar's naming, not in the annotations, so the report lists
+   them as a caveat on an improving move instead of rejecting it. *)
+let tune_new_jargon ~base ~trial =
+  StringSet.elements (StringSet.diff trial.tt_jargon base.tt_jargon)
+
+let tune_print_jargon_caveat = function
+  | [] -> ()
+  | names ->
+      Printf.printf
+        "    Caveat: it would show these names as jargon. Give each a readable\n\
+        \    name first (a [names] entry, a token alias, or a rule rename):\n";
+      List.iter (fun n -> Printf.printf "      %s\n" n) names
+
 let tune_rekey_phrase rc =
   if rc = 1 then "1 hand-written override"
   else Printf.sprintf "%d hand-written overrides" rc
@@ -849,6 +876,7 @@ let tune_advisor ts candidates =
             let rc = List.length rot in
             let gain = tune_gain ~base:ts.ts_base ~trial in
             let vec = tune_vector_delta ts.ts_base trial in
+            let jn = tune_new_jargon ~base:ts.ts_base ~trial in
             (* Exact equality [rc = gn] means the whole measurable win lands on
                states the [.overrides] file already serves, so applying the move
                relocates hand-written work without net gain: RELOCATES-OVERRIDDEN.
@@ -857,10 +885,11 @@ let tune_advisor ts candidates =
                rot-flagged (the [| _ ->] branch). *)
             match gain with
             | Some (gk, gn) when rc > 0 && gn > 0 && rc = gn ->
-                relocates := (label, gk, rc, rot, vec) :: !relocates
+                relocates := (label, gk, rc, rot, vec, jn) :: !relocates
             | _ ->
                 let cen = tune_census_diff ts.ts_base trial in
-                improving := (label, reason, rc, rot, vec, cen) :: !improving))
+                improving :=
+                  (label, reason, rc, rot, vec, cen, jn) :: !improving))
   in
   List.iter (fun nt -> do_move `Remove nt) ts.ts_annots;
   List.iter (fun nt -> do_move `Add nt) candidates;
@@ -876,6 +905,7 @@ let tune_advisor ts candidates =
     "  what each group means, and what to do with it:\n\
     \    improving             some message gets better, none gets worse; \
      consider applying\n\
+    \                          (after naming any jargon it lists)\n\
     \    relocates-overridden  its only gains are on states you already \
      hand-wrote\n\
     \                          a message for; usually skip (details below)\n\
@@ -895,11 +925,13 @@ let tune_advisor ts candidates =
       \  the list is already well-tuned).\n"
   else begin
     Printf.printf
-      "  IMPROVING: each of these makes some message better and none worse.\n\
-      \  Review one at a time (the scores do not add up):\n";
+      "  IMPROVING: each of these makes some message better and none worse,\n\
+      \  apart from any names it lists as jargon. Review one at a time (the\n\
+      \  scores do not add up):\n";
     List.iter
-      (fun (label, _reason, rc, rot, vec, cen) ->
+      (fun (label, _reason, rc, rot, vec, cen, jn) ->
         Printf.printf "  ---- %s\n%s\n" label vec;
+        tune_print_jargon_caveat jn;
         if rc > 0 then begin
           Printf.printf
             "    It also shifts the sample input that keys %s, so that\n\
@@ -919,8 +951,9 @@ let tune_advisor ts candidates =
       \  that hand-written work around, for no net gain. Apply only if the\n\
       \  generated message would actually read better than the hand-written one:\n";
     List.iter
-      (fun (label, _gk, rc, rot, vec) ->
+      (fun (label, _gk, rc, rot, vec, jn) ->
         Printf.printf "  ---- %s\n%s\n" label vec;
+        tune_print_jargon_caveat jn;
         Printf.printf
           "    Re-points %s (each keyed by the sample input that triggers it):\n"
           (tune_rekey_phrase rc);

@@ -168,9 +168,11 @@ README for the details.
 
 ## Stage 5: assume a finished list is complete
 
-Input B still lists everything a statement can start with. But the user has
-just finished a list of statements and typed a stray token, so it is more
-helpful to say where the block should end.
+Input B says `Expecting '}' or a stmt.` That is true, but it reads as if the
+stray `)` were a statement gone wrong. More likely, the user has finished the
+statements and meant to close the block. The message also has no delimiter
+hint: the parser is somewhere inside a list of any number of statements, so it
+cannot tell how far down its stack the `{` is.
 
 The `%on_error_reduce` annotation tells menhir to finish (to "fold") a construct
 it has fully read before reporting the error. stele can then phrase the message
@@ -190,6 +192,9 @@ Assuming that the stmts are complete, expecting '}'.
 
 This is a **hedge**. It is generated from menhir's own record of the fold, so it
 never claims more than the parser did. Stage 7 fixes the wording "the stmts".
+
+The delimiter hint is there too: once the statements are folded into one list,
+the `{` sits right below it on the stack.
 
 The `<^1>` line is the **hedge subject**. At run time it becomes an underline
 beneath the finished statement list, labelled `these stmts`. If the list is
@@ -302,9 +307,12 @@ stele tune advise  --grammar parser.mly --config calc.config --overrides calc.ov
   ranks the results. It also flags changes whose whole benefit lands on states
   you already overrode by hand.
 
-On calc, `advise` finds nothing to improve. Removing `stmts` is the one change
-it rates harmful: input B would go back to "Expecting '}' or a stmt.", with a
-rule name leaking into the message.
+On calc, `advise` suggests one change: removing `stmts`, which turns input B's
+hedge back into a plain list. It comes with a caveat: the list would read
+"Expecting '}' or a stmt.", so `stmt` first needs a readable name, such as a
+`[names]` entry. Its wording diff also shows what the counts miss: input B
+would lose its delimiter hint again. Weighing that is your call, which is why
+the tuner only recommends.
 
 It only recommends. The decisions stay with you, and the golden files show you
 their consequences.

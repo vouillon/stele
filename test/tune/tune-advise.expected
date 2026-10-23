@@ -18,6 +18,7 @@ apply one, re-run, and see what opens up next.
   summary: improving=0 relocates-overridden=0 mixed=0 harmful=1 dead/no-op=4 neutral=0 skipped=1
   what each group means, and what to do with it:
     improving             some message gets better, none gets worse; consider applying
+                          (after naming any jargon it lists)
     relocates-overridden  its only gains are on states you already hand-wrote
                           a message for; usually skip (details below)
     mixed                 helps one way and hurts another; read the wording

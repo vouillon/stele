@@ -44,7 +44,8 @@ example in `example/`.
 - Setting it up properly: [The pipeline](#the-pipeline-dune-rules),
   [The command line](#the-command-line), [Golden files](#golden-files)
 - Improving the wording: [The config file](#the-config-file),
-  [Naming](#naming), [The overrides file](#the-overrides-file)
+  [Naming](#naming), [Merged states](#merged-states),
+  [The overrides file](#the-overrides-file)
 - Advanced: [The runtime helper](#the-runtime-helper),
   [The annotation tuner](#the-annotation-tuner)
 - Reference: [Troubleshooting](#troubleshooting), [Layout](#layout),
@@ -506,6 +507,60 @@ mentions `->`). Prefer the annotation when the completed reading is the likely
 one, and splitting when the continuations inside the construct must stay
 visible.
 
+### Merged states
+
+**The symptom:** a message offers a token that cannot come next for this
+input, such as `')'` when no `(` is open. In the calc example, `{ 1 + 1 }` gets
+"Expecting ')', ';', or an operator."
+
+**The cause:** by default, menhir merges states that differ only in what may
+follow them. One error state then serves both `1 + 1` inside parentheses and
+`1 + 1` in a statement, and its message lists what is legal in either. The
+[soundness check](#what-a-message-contains) cannot catch this, because the
+token really is accepted in the merged state. Only reductions depend on what
+follows, so the wrong token is always one the state accepts by finishing a
+construct: here, `1 + 1` as an expression.
+
+There are three fixes. Each makes the calc message exact: "Expecting ';' or an
+operator."
+
+- **`%on_error_reduce` on the construct being finished** (`%on_error_reduce
+  expression` in calc). On an error, the parser finishes the construct anyway
+  and reports from the state it then reaches, which belongs to a single
+  context (after an expression in a statement, or inside parentheses). This
+  adds no state; calc even loses one error state. The trade-off is the one
+  described [above](#splitting-a-shared-rule): what could still come inside
+  the construct is folded into an "Assuming …" hedge. In calc nothing is lost,
+  since the operators are still accepted after the expression.
+- **Split the rule by what follows it**, with a phantom parameter, as in
+  [Splitting a shared rule](#splitting-a-shared-rule). Pass the token that
+  ends each context, and thread the parameter through the recursive uses:
+
+  ```
+  stmt:
+    | e = expression(SEMI) SEMI { e }
+
+  expression(ctx):                   (* ctx is unused: a phantom *)
+    | i = INT { i }
+    | LPAREN e = expression(RPAREN) RPAREN { e }
+    | a = expression(ctx) PLUS b = expression(ctx) { a + b }
+    | a = expression(ctx) STAR b = expression(ctx) { a * b }
+  ```
+
+  The two contexts now have their own states, so none can merge. The messages
+  still say "an expression". This adds states (calc goes from 18 to 26), but
+  only for the rules you split.
+- **Run menhir with `--canonical`**, which merges no state at all. Use it on
+  every menhir command (`--list-errors`, `--cmly`, `--compile-errors`, and the
+  parser build itself); the `state/automaton item-set match` line in `stats`
+  catches a mismatch. This needs no grammar change, but it splits every state
+  in the grammar, not just the ones whose messages suffer, so on a large
+  grammar the parser can grow a lot.
+
+Nothing flags these messages automatically yet, and `stele tune` rates the
+`%on_error_reduce` fix as neutral, because none of its counters move. You find
+them by reading the census.
+
 ## The overrides file
 
 The overrides file holds hand-written messages for the few states the
@@ -623,7 +678,10 @@ stele tune calibrate --grammar g.mly [--config g.config] --verdicts g.verdicts
   (improving, relocates-overridden, mixed, harmful, dead, neutral, skipped) with
   advice for each group, and describes each change in terms of the messages, for
   example `One fewer state that gives up with a bare "Syntax error" (too many
-  options to list)`. Two groups need judgement:
+  options to list)`. A change that would show a name as jargon ("a stmt") still
+  counts as improving when it improves something else, since a `[names]` entry,
+  a token alias or a rule rename fixes the name; the report lists those names as
+  a caveat. Two groups need judgement:
   - `RELOCATES-OVERRIDDEN`: the whole improvement lands on states you already
     wrote an override for. Apply it only if the generated message would beat
     yours. For every improving change, the report also says how many of your
@@ -669,18 +727,9 @@ own sidecars.
   [`[opener-nets]`](#the-config-file) entry does not create hints, but it makes
   `stats` list the states where an unaliased opener is missing one.
 - **A message offers a token that cannot come next for this input**, such as
-  `')'` when no `(` is open (in the calc example, `{ 1 + 1 }` gets "Expecting
-  ')', ';', or an operator."). By default, menhir merges states that differ
-  only in what may follow them, so one error state can serve both `1 + 1` inside
-  parentheses and `1 + 1` in a statement, and its message lists what is legal
-  in either. The [soundness check](#what-a-message-contains) cannot catch this,
-  because the token really is accepted in that merged state. Running every
-  menhir command (`--list-errors`, `--cmly`, `--compile-errors`, and the parser
-  build itself) with `--canonical` keeps those states apart and makes such
-  messages exact ("Expecting ';' or an operator."), at the cost of more states
-  and a larger parser: calc goes from 9 error states to 14. The four commands
-  must agree; the `state/automaton item-set match` line in `stats` catches a
-  mismatch.
+  `')'` when no `(` is open. Menhir merged two states. See
+  [Merged states](#merged-states): `%on_error_reduce`, splitting the rule, or
+  `--canonical` fixes it.
 - **The build fails naming a config or override entry.** The grammar changed and
   the entry refers to something that no longer exists. Fix or delete it.
 
@@ -719,7 +768,7 @@ stele/
     cli/                     ; review commands and error messages, on a grammar
                              ; with more operators than the cap
     tune/                    ; the tuner, on awkwardly laid-out annotations
-  README.md  TUTORIAL.md  CHANGES.md  LICENSE
+  README.md  TUTORIAL.md  CHANGES.md  TODO.md  LICENSE
 ```
 
 ## Credit

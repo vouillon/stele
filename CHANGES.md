@@ -11,8 +11,11 @@
 - `stele tune` can now try removing the last annotation (it used to write an
   empty declaration, which menhir rejects, and reported the move as skipped),
   and advises on additions for a grammar that has no annotation yet.
-- `stele tune` rates a move harmful when it introduces a rule name that reads
-  as code jargon, as `stats` reports under "jargon-rendered nonterminals".
+- `stele tune` counts the rule names that read as code jargon, as `stats`
+  reports under "jargon-rendered nonterminals". New jargon, token or rule, no
+  longer makes a move harmful when the move improves something else: the
+  config fixes a name, so the report lists the names as a caveat instead. A
+  move whose only effect is new jargon is still harmful.
 - `stele tune` reports a grammar menhir rejects with menhir's own error, and a
   bad config as such. The timing line now goes to stderr.
 - "jargon-rendered nonterminals" in `stats` also catches a rule name shown
